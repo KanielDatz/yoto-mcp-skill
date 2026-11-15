@@ -131,7 +131,14 @@ node tools/yoto-discover.mjs ~/yoto/noa.json init     # then fill in the profile
 node tools/yoto-discover.mjs ~/yoto/noa.json age      # age today, from birth month
 node tools/yoto-discover.mjs ~/yoto/noa.json scan     # JSON: new episodes + new shows
 node tools/yoto-discover.mjs ~/yoto/noa.json probe <feedUrl>   # inspect any feed
+node tools/yoto-discover.mjs ~/yoto/noa.json autoadd <feedUrl> on   # keep a card updated
 ```
+
+A podcast that is already a card can be kept up to date automatically: with `autoadd` on
+for that feed, scheduled runs add new episodes to the card and make icons for them, then
+report what they added. It is opt-in per show, applies only to cards built from downloaded
+files (an RSS-linked card updates itself), never covers a show the parent hasn't already
+approved, and stops to ask rather than part-filling a card that is running out of room.
 
 `scan` searches iTunes and re-reads the feeds already tracked. For everything iTunes misses
 — כאן הסכתים, Podbean, Spreaker, Omny, YouTube, shows that publish only on their own site —

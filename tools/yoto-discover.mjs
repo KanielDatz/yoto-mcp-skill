@@ -19,6 +19,16 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 
 const UA = "yoto-discover/1.0 (+https://github.com/KanielDatz/yoto-mcp-skill)";
 
+// Yoto Make Your Own limits, per Yoto support. Reported by `scan` so capacity
+// is checked before anything is uploaded, not after.
+const CARD_LIMITS = {
+  maxTracks: 100,
+  maxCardSeconds: 5 * 3600,
+  maxCardBytes: 500 * 1024 * 1024,
+  maxTrackSeconds: 60 * 60,
+  maxTrackBytes: 100 * 1024 * 1024,
+};
+
 // iTunes answers a throttled request with HTTP 200 and an EMPTY BODY, so an
 // empty response means "try again", not "no results". Without the User-Agent
 // above it does the same thing on every call.
@@ -166,15 +176,30 @@ async function newEpisodes(feeds) {
         if (seenAt && it.date) return new Date(it.date).valueOf() > seenAt;
         return !seenAt;
       });
+      const picked = fresh.slice(0, 25).map((e) => ({
+        ...e,
+        // A single track cannot exceed the per-track limit, so this one needs
+        // splitting or skipping - never silently dropping.
+        tooLongForTrack:
+          e.durationSeconds != null && e.durationSeconds > CARD_LIMITS.maxTrackSeconds,
+      }));
       out.push({
         cardId: f.cardId || null,
         show: f.title || f.feedUrl,
         feedUrl: f.feedUrl,
+        autoAdd: f.autoAdd === true,
         totalInFeed: items.length,
-        episodes: fresh.slice(0, 25),
+        newTotalDurationSeconds: picked.reduce((s, e) => s + (e.durationSeconds || 0), 0),
+        episodes: picked,
       });
     } catch (err) {
-      out.push({ cardId: f.cardId || null, show: f.title || f.feedUrl, feedUrl: f.feedUrl, error: err.message });
+      out.push({
+        cardId: f.cardId || null,
+        show: f.title || f.feedUrl,
+        feedUrl: f.feedUrl,
+        autoAdd: f.autoAdd === true,
+        error: err.message,
+      });
     }
   }
   return out;
@@ -266,7 +291,8 @@ if (!profilePath || !cmd) {
       "  probe <feedUrl>                            inspect any feed found elsewhere",
       "  record suggested|accepted|rejected <id> <title...>",
       "  seen <feedUrl> <guid> <isoDate>            advance a feed's pointer",
-      "  track <cardId> <feedUrl> <title...>        follow a feed for a card",
+      "  track <cardId> <feedUrl> [--auto] <title...>  follow a feed for a card",
+      "  autoadd <feedUrl> on|off                   auto-add new episodes to that card",
     ].join("\n")
   );
   process.exit(1);
@@ -302,6 +328,8 @@ switch (cmd) {
           child: profile.name,
           scannedAt: new Date().toISOString(),
           age: a,
+          cardLimits: CARD_LIMITS,
+          delivery: profile.delivery,
           languages: profile.languages,
           avoid: profile.avoid,
           preferredLengthMinutes: profile.preferredLengthMinutes,
@@ -381,7 +409,8 @@ switch (cmd) {
   }
 
   case "track": {
-    const [cardId, feedUrl, ...title] = rest;
+    const auto = rest.includes("--auto");
+    const [cardId, feedUrl, ...title] = rest.filter((a) => a !== "--auto");
     if (!cardId || !feedUrl) {
       console.error("usage: track <cardId> <feedUrl> <title...>");
       process.exit(1);
@@ -395,11 +424,30 @@ switch (cmd) {
       cardId,
       feedUrl,
       title: title.join(" "),
+      autoAdd: auto,
       lastSeenGuid: null,
       lastSeenDate: new Date().toISOString(),
     });
     save(profilePath, profile);
-    console.log(`tracking ${feedUrl} for card ${cardId}`);
+    console.log(`tracking ${feedUrl} for card ${cardId}${auto ? " (auto-add on)" : ""}`);
+    break;
+  }
+
+  // Opt in per show. Off unless the parent asked for it on that show.
+  case "autoadd": {
+    const [feedUrl, state] = rest;
+    if (!feedUrl || !["on", "off"].includes(state)) {
+      console.error("usage: autoadd <feedUrl> on|off");
+      process.exit(1);
+    }
+    const f = (profile.feeds || []).find((x) => x.feedUrl === feedUrl);
+    if (!f) {
+      console.error(`not tracking ${feedUrl}`);
+      process.exit(1);
+    }
+    f.autoAdd = state === "on";
+    save(profilePath, profile);
+    console.log(`auto-add ${state} for ${f.title || feedUrl}`);
     break;
   }
 

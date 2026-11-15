@@ -198,6 +198,42 @@ cover and icons. Then write down what happened, so nothing is ever proposed twic
   its new episodes
 - `seen <feedUrl> <guid> <isoDate>` once episodes are actually on a card
 
+### 5. Keeping a card up to date automatically
+
+New episodes of a show that is **already a card the parent approved** can be added without
+asking again. This is the one place the skill acts on its own, so it is opt-in per show and
+off until someone turns it on.
+
+**Offer it when a podcast becomes a card** — that is the natural moment: "want me to add
+new episodes of this one automatically from now on?" Turn it on with
+`track <cardId> <feedUrl> --auto <title>`, or later with `autoadd <feedUrl> on`. `off`
+stops it.
+
+**It only makes sense for cards built from downloaded files.** An RSS-linked card already
+picks up new episodes by itself, so there is nothing to automate — don't offer it there.
+
+On a scheduled run, for each feed with `autoAdd: true` and something new:
+
+1. **Check it fits.** `scan` reports `cardLimits` and `newTotalDurationSeconds`; read the
+   card with `yoto-get-card` for what is on it already. The limits are 100 tracks, and 5
+   hours or 500 MB per card.
+2. **Skip anything marked `tooLongForTrack`** — it is over the 60-minute per-track limit
+   and cannot be added as one track. Say which episodes you skipped and why. Never drop one
+   silently.
+3. **Apply `avoid`** as you would for anything else.
+4. **Add the tracks in order**, then make icons for them. Art stays a default step here too.
+5. **Advance the pointer** with `seen`, so the next run starts after these.
+6. **Report what you did** — a short summary, not a question: which episodes went on which
+   card. If nothing was new, say nothing at all.
+
+**If the new episodes don't fit, stop and ask.** Don't part-fill a card quietly. Say how
+much room is left and offer a second card for the rest. A card that silently stopped
+updating three months ago is worse than one that asked.
+
+**Auto-add never applies to a new show.** It covers new episodes of a show already on a
+card. Anything the parent has not already approved goes through the proposal table as
+usual, however well it fits.
+
 ## RSS or downloaded files
 
 Whenever content is available as a feed, **ask which the parent wants** — the answer
