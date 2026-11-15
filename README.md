@@ -134,10 +134,28 @@ node tools/yoto-discover.mjs ~/yoto/noa.json probe <feedUrl>   # inspect any fee
 ```
 
 `scan` searches iTunes and re-reads the feeds already tracked. For everything iTunes misses
-— כאן הסכתים, Podbean, Spreaker, Omny, shows that publish only on their own site — the agent
-searches the web and runs `probe` on what it finds, which pulls any feed into the same
-pipeline and reports its language (feeds declare it; the iTunes API does not), whether the
-episodes are actually downloadable, how recently it published, and its median length.
+— כאן הסכתים, Podbean, Spreaker, Omny, YouTube, shows that publish only on their own site —
+the agent searches the web and runs `probe` on what it finds, which pulls any feed into the
+same pipeline and reports its language (feeds declare it; the iTunes API does not), whether
+the episodes are actually downloadable, how recently it published, and its median length.
+
+A YouTube channel's feed (`youtube.com/feeds/videos.xml?channel_id=<id>`) works with
+`probe` too, so a channel can be watched for new uploads — though it carries no audio, so
+YouTube is always delivered as downloaded files rather than a linked feed.
+
+## Languages
+
+The skill is not English-only. It replies in the parent's language, keeps titles in the
+content's own language, and handles RTL — `art/make-ouz.mjs` is itself a Hebrew card. The
+bundled Rubik font covers Latin, Hebrew and Cyrillic in full and Arabic in part; for Greek,
+CJK, Devanagari or Thai, add a font to `art/fonts/` and change `font-family` in the cover
+SVG.
+
+## Card limits
+
+A Make Your Own card holds **100 tracks**, **500 MB or 5 hours** of audio, with **100 MB or
+60 minutes** per track ([Yoto
+support](https://support.yotoplay.com/en_gb/how-much-audio-fits-on-a-make-your-own-card-r1ssdFimfl.md)).
 
 Needs Node 18+; no dependencies. Store the age as `birth: "YYYY-MM"` — the tool recomputes
 the age on every run, so a profile never goes stale.

@@ -7,6 +7,22 @@ description: Create and manage Yoto MYO cards from chat — upload audio, add tr
 
 Tools come from the `yoto` MCP server (`server/`, setup in README.md): `yoto-auth`, `yoto-auth-complete`, `yoto-check-auth`, `yoto-list-cards`, `yoto-get-card`, `yoto-upload-audio` (creates a card with track 1), `yoto-add-track`, `yoto-set-card-art`.
 
+## Languages
+
+Most people using this are not working in English, and nothing here assumes they are.
+
+- **Reply in the parent's language** — match whatever they write to you.
+- **Titles stay in the content's own language.** A Hebrew story gets a Hebrew track title;
+  don't translate titles into English for your own convenience. The cover too.
+- **Icon ideas follow the child's own world**, not a default Anglo one.
+- **RTL works.** `art/make-ouz.mjs` is itself a Hebrew card — `direction="rtl"` on the text
+  element, verified rendering correctly through sharp. Copy it as the template for any RTL
+  cover.
+- **The bundled Rubik font covers Latin, Hebrew and Cyrillic** in full, and Arabic in part.
+  It has no Greek, CJK, Devanagari or Thai. For those, put a font that does into
+  `art/fonts/` and change `font-family` in the cover SVG. A missing glyph comes out as a
+  box or as nothing, so look at `cover.png` before applying it.
+
 ## First run: get the user set up before anything else
 
 **Work out what is already done before you ask or change anything.** Anyone past their
@@ -63,6 +79,11 @@ If the token file sits somewhere ephemeral (a container's `$HOME`), say once tha
 5. **Generate**: copy `art/make-ouz.mjs` as the template (16x16 grids using the palette in the file; cover is a 160x253 SVG upscaled to 638x1011). Run with `FONTCONFIG_FILE=<art/fonts.conf> node make-xyz.mjs`, open `sheet.png` and `cover.png` to eyeball before applying (check symmetry and stray gaps).
 6. **Apply**: `yoto-set-card-art` with `coverPath` and `icons: [{track, iconPath}, ...]`.
 7. Tell the user to re-sync the player to see changes.
+
+**Card limits**, from Yoto's own support docs: **100 tracks** per card, **500 MB or 5
+hours** of audio per card, and **100 MB or 60 minutes** for any single track. Work the
+split out against these before proposing it, not after uploading. They apply to playlists
+you create; a Yoto Card linked from the app library is not subject to them.
 
 ## Proactive discovery by child profile
 
@@ -122,6 +143,14 @@ is yours, with web search:
 - **For what it misses, search the web directly**: כאן הסכתים, Podbean, Spreaker, Omny,
   shows that publish only on their own site. Also just ask the parent where they get
   podcasts — they usually know the local landscape better than any index.
+- **YouTube is a real source**, especially for songs and stories in languages that
+  podcasts underserve. `yt-dlp` takes the audio (latest version — see the pipeline). Two
+  things to know. A channel has a feed at
+  `https://www.youtube.com/feeds/videos.xml?channel_id=<id>` which `probe` reads, so a
+  channel can be watched for new uploads exactly like a podcast — but it carries no audio,
+  so `downloadable` is false and YouTube can only ever be delivered as **files, never as a
+  linked RSS card**. And check what you are actually getting: a ten-hour compilation is one
+  track, not fifteen.
 - **Spotify is for finding out what exists, not for sourcing.** Spotify-exclusive shows and
   streamed music have no downloadable audio and no feed, so they cannot become a card.
   Don't propose something that can't be delivered.
@@ -160,7 +189,7 @@ month" teaches the parent to ignore it.
 
 ### 4. After approval
 
-Create it as in the pipeline above — upload, fill each card up to the Yoto limit, then
+Create it as in the pipeline above — upload, fill each card up to the Yoto limits above, then
 cover and icons. Then write down what happened, so nothing is ever proposed twice:
 
 - `record suggested <id> <title>` for everything you put in the table, and
