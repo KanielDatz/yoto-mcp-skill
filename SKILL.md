@@ -56,10 +56,10 @@ If the token file sits somewhere ephemeral (a container's `$HOME`), say once tha
 
 ## Pipeline for a new card (art is a default step, not optional)
 
-1. **Find / prepare the audio** (yt-dlp, RSS, files). Latest yt-dlp is required — old builds fail with "Requested format is not available".
+1. **Find / prepare the audio** (yt-dlp, RSS, files). Latest yt-dlp is required — old builds fail with "Requested format is not available". If a feed exists, this is where you settle RSS vs downloaded files — see "RSS or downloaded files" below.
 2. **Show a table and wait for approval before touching Yoto**: track #, title, duration, source. If unsure whether content is one long recording or separate songs, ask. One song per track is the usual wish.
 3. **Create the card**: `yoto-upload-audio` with track 1 (title = card title), then `yoto-add-track` for each remaining track *sequentially, in order*. Fix track 1's title afterwards: `node tools/yoto-chapters.mjs <cardId> rename 1 "<title>"`.
-4. **Art**: read each track's actual content (description / summary / lyrics / audio), not just the title. Propose one icon concept per track plus a cover concept, wait for approval.
+4. **Art — carry straight on; this needs no second approval.** Approving the card covers its art. Read each track's actual content (description / summary / lyrics / audio), not just the title, then design one icon per track plus a cover.
 5. **Generate**: copy `art/make-ouz.mjs` as the template (16x16 grids using the palette in the file; cover is a 160x253 SVG upscaled to 638x1011). Run with `FONTCONFIG_FILE=<art/fonts.conf> node make-xyz.mjs`, open `sheet.png` and `cover.png` to eyeball before applying (check symmetry and stray gaps).
 6. **Apply**: `yoto-set-card-art` with `coverPath` and `icons: [{track, iconPath}, ...]`.
 7. Tell the user to re-sync the player to see changes.
@@ -88,7 +88,8 @@ Never commit these files — they describe a child.
   field at all, so language comes from the search terms plus `country`: without terms in
   Hebrew, a Hebrew-speaking child gets English results only.
 - `country` — iTunes storefront, e.g. `IL`
-- optional: `preferredLengthMinutes`, `avoid` (unwanted content), `notes`
+- optional: `preferredLengthMinutes`, `avoid` (unwanted content), `notes`, `delivery`
+  (the RSS-or-files default — see below)
 
 If there is no profile, offer to build one and ask for all of it **in one short
 conversation**, not one question per turn. Then invite the parent to add anything else
@@ -110,8 +111,29 @@ Each run is `node tools/yoto-discover.mjs <profile> scan`, which prints JSON and
 - searches iTunes per search term × language × {podcast, music}, with `country`;
 - drops explicit items, and anything already in `feeds` or `history`.
 
-A web search alongside this is worth doing for anything iTunes indexes poorly — local and
-Hebrew children's content especially.
+#### Looking past iTunes
+
+`scan` covers iTunes and the feeds already tracked. That is the mechanical half — the rest
+is yours, with web search:
+
+- **iTunes handles Hebrew better than it looks.** Hebrew terms with `country=IL` return
+  Israeli shows along with their real feed URLs (Spreaker, Omny and the like). Start there
+  before going further afield.
+- **For what it misses, search the web directly**: כאן הסכתים, Podbean, Spreaker, Omny,
+  shows that publish only on their own site. Also just ask the parent where they get
+  podcasts — they usually know the local landscape better than any index.
+- **Spotify is for finding out what exists, not for sourcing.** Spotify-exclusive shows and
+  streamed music have no downloadable audio and no feed, so they cannot become a card.
+  Don't propose something that can't be delivered.
+
+Run `probe <feedUrl>` on anything you find before proposing it. It pulls any feed into the
+same pipeline and answers what actually matters:
+
+- `language` — feeds declare their own, unlike the iTunes API, so this is the one reliable
+  language signal available
+- `downloadable` / `episodesWithAudio` — whether there is real audio to put on a card
+- `monthsSinceLatest`, `episodeCount` — whether the show is alive or abandoned
+- `medianDurationMinutes` — against the child's preferred length
 
 Then **you** apply the filters that need judgement: age fit, language, `avoid`, and
 quality. For quality use `episodeCount` and `monthsSinceLatest`: a show last touched two
@@ -126,8 +148,12 @@ reason; "ten-minute animal quizzes, and she has been asking about predators" is.
 
 Then wait for approval. Before creating anything, always ask two things:
 
-1. upload the audio files, or link the RSS feed?
+1. RSS or downloaded files — see the section below, and skip the question only if the
+   profile already has a `delivery` default
 2. how many cards to split it across?
+
+Art is not one of these questions: once the card is approved, carry on through icons and
+cover without stopping.
 
 **If nothing is new, send nothing at all.** A monthly task that reports "nothing new this
 month" teaches the parent to ignore it.
@@ -142,6 +168,36 @@ cover and icons. Then write down what happened, so nothing is ever proposed twic
 - `track <cardId> <feedUrl> <title>` when a podcast becomes a card, so later runs pick up
   its new episodes
 - `seen <feedUrl> <guid> <isoDate>` once episodes are actually on a card
+
+## RSS or downloaded files
+
+Whenever content is available as a feed, **ask which the parent wants** — the answer
+depends on their home, not on the content. Explain both briefly; most people have never
+been asked.
+
+**Link the RSS feed**
+- New episodes appear on the card by themselves; nothing to do later
+- Nothing to upload, so the card is ready immediately
+- **Needs a decent connection on the player every single time it plays.** On weak or busy
+  wifi it stalls or won't start at all
+- Plays nothing away from wifi — the car, a plane, a grandparent's house
+- Episodes can change or disappear if the publisher removes them
+
+**Download the files**
+- Plays offline, every time, with no connection at all
+- Fixed: exactly the episodes chosen, and they never vanish
+- Starts instantly, no buffering
+- New episodes need another run to be added
+- Upload and transcode take time up front (long audio, minutes)
+- Counts against the card's capacity
+
+Rule of thumb: weak or unreliable wifi, or a child who listens in the car and away from
+home — files. A podcast they follow and play at home on good wifi — RSS. If the parent has
+already told you their connection is poor, recommend files and say why.
+
+Then offer to save the answer as their default in the profile's `delivery`
+(`"rss"` | `"files"`; `null` means keep asking), and say they can change it whenever. With
+a default set, don't ask again — but do say which one you are using, so it stays visible.
 
 ## Editing
 

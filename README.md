@@ -130,7 +130,14 @@ agent follows.
 node tools/yoto-discover.mjs ~/yoto/noa.json init     # then fill in the profile
 node tools/yoto-discover.mjs ~/yoto/noa.json age      # age today, from birth month
 node tools/yoto-discover.mjs ~/yoto/noa.json scan     # JSON: new episodes + new shows
+node tools/yoto-discover.mjs ~/yoto/noa.json probe <feedUrl>   # inspect any feed
 ```
+
+`scan` searches iTunes and re-reads the feeds already tracked. For everything iTunes misses
+— כאן הסכתים, Podbean, Spreaker, Omny, shows that publish only on their own site — the agent
+searches the web and runs `probe` on what it finds, which pulls any feed into the same
+pipeline and reports its language (feeds declare it; the iTunes API does not), whether the
+episodes are actually downloadable, how recently it published, and its median length.
 
 Needs Node 18+; no dependencies. Store the age as `birth: "YYYY-MM"` — the tool recomputes
 the age on every run, so a profile never goes stale.

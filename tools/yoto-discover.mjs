@@ -53,6 +53,8 @@ const TEMPLATE = {
   searchTerms: {},
   country: "US",
   preferredLengthMinutes: { min: null, max: null },
+  // "rss" | "files" | null. null means ask the parent each time.
+  delivery: null,
   avoid: [],
   notes: "",
   schedule: { frequency: "monthly", createdAt: null },
@@ -114,6 +116,18 @@ function durationSeconds(raw) {
   const parts = raw.split(":").map(Number);
   if (parts.some(Number.isNaN)) return null;
   return parts.reduce((acc, n) => acc * 60 + n, 0);
+}
+
+// Unlike the iTunes API, a feed usually declares its own language.
+function parseChannel(xml) {
+  const head = xml.split(/<item(?:\s|>)|<entry(?:\s|>)/i)[0];
+  return {
+    title: tag(head, ["title"]),
+    description: tag(head, ["description", "itunes:summary", "subtitle"]).slice(0, 400),
+    language: (/<language(?:\s[^>]*)?>([\s\S]*?)<\/language>/i.exec(head)?.[1] || "").trim() || null,
+    author: tag(head, ["itunes:author", "managingEditor", "author"]),
+    explicit: /<itunes:explicit(?:\s[^>]*)?>\s*(?:yes|true)\s*<\/itunes:explicit>/i.test(head),
+  };
 }
 
 function parseFeed(xml) {
@@ -249,6 +263,7 @@ if (!profilePath || !cmd) {
       "  init                                       write a blank profile",
       "  age                                        age today, from birth",
       "  scan                                       JSON: new episodes + new shows",
+      "  probe <feedUrl>                            inspect any feed found elsewhere",
       "  record suggested|accepted|rejected <id> <title...>",
       "  seen <feedUrl> <guid> <isoDate>            advance a feed's pointer",
       "  track <cardId> <feedUrl> <title...>        follow a feed for a card",
@@ -293,6 +308,44 @@ switch (cmd) {
           nothingNew: !withNew.length && !shows.length,
           newEpisodes: episodes,
           newShows: shows,
+        },
+        null,
+        2
+      )
+    );
+    break;
+  }
+
+  // Brings a feed found anywhere - web search, Spotify, a station's own site -
+  // into the same pipeline, without tracking it first.
+  case "probe": {
+    const [feedUrl] = rest;
+    if (!feedUrl) {
+      console.error("usage: probe <feedUrl>");
+      process.exit(1);
+    }
+    const xml = await getText(feedUrl);
+    const items = parseFeed(xml);
+    const dated = items.filter((i) => i.date).sort((a, b) => new Date(b.date) - new Date(a.date));
+    const latest = dated[0]?.date || null;
+    const withAudio = items.filter((i) => i.audioUrl).length;
+    const durations = items.map((i) => i.durationSeconds).filter((d) => d);
+    console.log(
+      JSON.stringify(
+        {
+          feedUrl,
+          ...parseChannel(xml),
+          episodeCount: items.length,
+          episodesWithAudio: withAudio,
+          downloadable: withAudio > 0,
+          latestRelease: latest,
+          monthsSinceLatest: latest
+            ? (Date.now() - new Date(latest).valueOf()) / (1000 * 60 * 60 * 24 * 30.44)
+            : null,
+          medianDurationMinutes: durations.length
+            ? Math.round(durations.sort((a, b) => a - b)[Math.floor(durations.length / 2)] / 60)
+            : null,
+          recentEpisodes: (dated.length ? dated : items).slice(0, 10),
         },
         null,
         2
