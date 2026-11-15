@@ -7,6 +7,17 @@ Create Yoto MYO cards from an agent (Claude Code / NanoClaw / any MCP client): u
 - `art/` — pixel-art generator: `make.mjs` (Science-Yuck card), `make-ouz.mjs` (template for a new card), Rubik font
 - `tools/yoto-chapters.mjs` — list / remove / rename chapters on an existing card
 
+## Quickest path: let an agent set it up
+
+If the agent you are using can see this repo and run commands, you don't have to work
+through the steps below by hand. Ask it to set up the yoto skill. `SKILL.md` tells it to
+check what is already in place first, do the parts it can do itself (building the server,
+installing the art dependencies, fixing the font path), and come back to you only for the
+two things it cannot get on its own: your Yoto client ID, and the auth code from your
+browser. It also knows the two points where this looks broken but isn't — see steps 2 and 3.
+
+The rest of this file is the manual path, and the reference for what the agent is doing.
+
 ## Before you start: register your own Yoto client ID
 
 Go to https://yoto.dev, create an app, and copy its client ID. The server reads it from
@@ -57,6 +68,10 @@ Tokens are stored in `server/.yoto-mcp-config.json` (override with `YOTO_CONFIG_
 ```
 
 or `claude mcp add yoto -e YOTO_CLIENT_ID=your_client_id_here -- node /abs/path/to/server/dist/index.js`.
+
+**Restart the client fully after editing this** — not a new chat, the whole application.
+MCP servers are read at startup, so until you do, the `yoto-*` tools simply won't be there
+and nothing will look like it worked.
 
 **NanoClaw (this skill's home):**
 

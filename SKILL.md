@@ -9,9 +9,20 @@ Tools come from the `yoto` MCP server (`server/`, setup in README.md): `yoto-aut
 
 ## First run: get the user set up before anything else
 
-Call `yoto-check-auth` at the start of any Yoto request. It tells you where the user
-actually is, so you don't walk someone through steps they finished weeks ago. Fix only the
-step that is actually broken, then carry on with what they asked for.
+**Work out what is already done before you ask or change anything.** Anyone past their
+first card has some of this set up already, possibly months ago. Check all of it, in this
+order, and never ask the user something you can establish by looking:
+
+1. Are the `yoto-*` tools in your tool list? If not, the MCP server isn't connected —
+   nothing else can be checked until it is.
+2. `yoto-check-auth`. One call separates two states: a missing `YOTO_CLIENT_ID` comes back
+   as that error, anything else means the ID is fine and only the token is missing.
+3. Does `art/node_modules/` exist, and does the `<dir>` in `art/fonts.conf` point at a
+   directory that is actually there? Read the file and look; don't ask.
+
+Then fix only the gaps and go straight on to what the user actually asked for. If
+everything checks out, say nothing about setup at all — skip to the pipeline. Announcing
+that you verified a setup the user completed months ago is noise.
 
 Throughout: assume no terminal experience unless the user shows otherwise. Run the commands
 yourself wherever you can instead of dictating them, ask one question at a time, and check
