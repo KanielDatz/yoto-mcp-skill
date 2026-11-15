@@ -9,16 +9,19 @@ Create Yoto MYO cards from an agent (Claude Code / NanoClaw / any MCP client): u
 
 ## Before you start: register your own Yoto client ID
 
-`server/src/index.ts` ships with a `CLIENT_ID` constant. **Replace it with your own** before you use this: go to https://yoto.dev, create an app, and copy its client ID.
+Go to https://yoto.dev, create an app, and copy its client ID. The server reads it from
+the `YOTO_CLIENT_ID` environment variable and will not authenticate without it — every
+auth tool returns a message telling you to set it.
 
-```ts
-const CLIENT_ID = "your_client_id_here";
+```bash
+export YOTO_CLIENT_ID=your_client_id_here
 ```
 
-The ID committed here belongs to this repo author's own registered app. It is a public
-PKCE client ID, so there is no secret in it to leak — but every install that keeps it
-shares a single app registration, and therefore shares its rate limits. Registering your
-own takes a minute and is free.
+In an MCP client, set it in the server's `env` block instead (see the examples below).
+
+It is a public PKCE client ID, not a secret, so there is nothing in it to leak. But each
+registration carries its own rate limits, so use one of your own rather than borrowing
+someone else's. Registering takes a minute and is free.
 
 ## Credits
 
@@ -42,10 +45,18 @@ Tokens are stored in `server/.yoto-mcp-config.json` (override with `YOTO_CONFIG_
 **Claude Code / any stdio MCP client:**
 
 ```json
-{ "mcpServers": { "yoto": { "command": "node", "args": ["/abs/path/to/server/dist/index.js"] } } }
+{
+  "mcpServers": {
+    "yoto": {
+      "command": "node",
+      "args": ["/abs/path/to/server/dist/index.js"],
+      "env": { "YOTO_CLIENT_ID": "your_client_id_here" }
+    }
+  }
+}
 ```
 
-or `claude mcp add yoto -- node /abs/path/to/server/dist/index.js`.
+or `claude mcp add yoto -e YOTO_CLIENT_ID=your_client_id_here -- node /abs/path/to/server/dist/index.js`.
 
 **NanoClaw (this skill's home):**
 
@@ -54,6 +65,9 @@ ncl groups config add-mcp-server --name yoto --command node \
   --args '["/workspace/agent/yoto-mcp-server/dist/index.js"]'
 ncl groups restart      # needs admin approval; config changes apply after restart
 ```
+
+`YOTO_CLIENT_ID` goes in the `env` field of the `yoto` entry in the group's container
+config, the same place as `NO_PROXY` below.
 
 If the container goes through an HTTPS-intercepting proxy (OneCLI), the Yoto hosts must bypass it so the OAuth/API calls aren't rewritten — add to the server's `env`:
 

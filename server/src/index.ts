@@ -14,7 +14,10 @@ import { randomBytes, createHash } from "crypto";
 // homedir() is NOT persisted across container restarts — keep the config
 // under the workspace mount instead, or re-auth is required every restart.
 const CONFIG_PATH = process.env.YOTO_CONFIG_PATH || new URL("../.yoto-mcp-config.json", import.meta.url).pathname;
-const CLIENT_ID = "tpc_4Y7pJYhDPNKe6bnG98nQQg";
+// Register your own app at https://yoto.dev and set YOTO_CLIENT_ID in this
+// server's env (see README). It is a public PKCE client ID, not a secret, but
+// each registration carries its own rate limits, so don't share one.
+const CLIENT_ID = process.env.YOTO_CLIENT_ID;
 const AUTH_SERVER = "https://login.yotoplay.com";
 const API_SERVER = "https://api.yotoplay.com";
 // Yoto deprecated the device_code flow for self-registered apps in favor of
@@ -24,6 +27,19 @@ const API_SERVER = "https://api.yotoplay.com";
 // (intentionally failing) redirect URL back to us.
 const REDIRECT_URI = "http://127.0.0.1:8787/callback";
 const SCOPE = "openid profile offline_access user:content:manage family:library:view";
+
+// Resolved at call time, not at startup: the server still boots without a
+// client ID so the agent can surface this message in chat instead of dying
+// with an opaque MCP connection error.
+function requireClientId(): string {
+  if (!CLIENT_ID) {
+    throw new Error(
+      "YOTO_CLIENT_ID is not set. Register an app at https://yoto.dev, then set " +
+        "YOTO_CLIENT_ID in this MCP server's env - see the README for where it goes."
+    );
+  }
+  return CLIENT_ID;
+}
 
 interface YotoConfig {
   accessToken?: string;
@@ -63,7 +79,7 @@ async function authenticate(): Promise<string> {
         body: new URLSearchParams({
           grant_type: "refresh_token",
           refresh_token: config.refreshToken,
-          client_id: CLIENT_ID,
+          client_id: requireClientId(),
         }),
       });
 
@@ -111,7 +127,7 @@ function buildAuthorizeUrl(): { url: string; code_verifier: string; state: strin
     audience: "https://api.yotoplay.com",
     scope: SCOPE,
     response_type: "code",
-    client_id: CLIENT_ID,
+    client_id: requireClientId(),
     code_challenge,
     code_challenge_method: "S256",
     redirect_uri: REDIRECT_URI,
@@ -127,7 +143,7 @@ async function exchangeCodeForToken(code: string, code_verifier: string): Promis
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "authorization_code",
-      client_id: CLIENT_ID,
+      client_id: requireClientId(),
       code_verifier,
       code,
       redirect_uri: REDIRECT_URI,
