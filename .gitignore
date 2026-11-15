@@ -3,3 +3,7 @@ node_modules/
 dist/
 out/
 out-*/
+
+# child profiles - personal data, never commit
+profiles/
+*.profile.json

@@ -6,6 +6,7 @@ Create Yoto MYO cards from an agent (Claude Code / NanoClaw / any MCP client): u
 - `server/` — the Yoto MCP server (Node/TypeScript)
 - `art/` — pixel-art generator: `make.mjs` (Science-Yuck card), `make-ouz.mjs` (template for a new card), Rubik font
 - `tools/yoto-chapters.mjs` — list / remove / rename chapters on an existing card
+- `tools/yoto-discover.mjs` — per-child profiles and scheduled discovery of new content
 
 ## Quickest path: let an agent set it up
 
@@ -117,3 +118,31 @@ node tools/yoto-chapters.mjs <cardId> list
 node tools/yoto-chapters.mjs <cardId> remove 8
 node tools/yoto-chapters.mjs <cardId> rename 1 "New title"
 ```
+
+## 6. Proactive discovery (per child)
+
+Keeps a profile for each child and, on a schedule, looks for content that now fits them —
+new episodes of podcasts they already have, and new shows matching their interests and
+languages. It proposes; it never creates a card on its own. `SKILL.md` has the workflow the
+agent follows.
+
+```bash
+node tools/yoto-discover.mjs ~/yoto/noa.json init     # then fill in the profile
+node tools/yoto-discover.mjs ~/yoto/noa.json age      # age today, from birth month
+node tools/yoto-discover.mjs ~/yoto/noa.json scan     # JSON: new episodes + new shows
+```
+
+Needs Node 18+; no dependencies. Store the age as `birth: "YYYY-MM"` — the tool recomputes
+the age on every run, so a profile never goes stale.
+
+Two things worth knowing about the iTunes Search API, both handled in the tool: it needs a
+`User-Agent` or it answers every call with an empty body, and it rate-limits by answering
+`200` with an empty body, which the tool retries with backoff rather than reading as "no
+results".
+
+Profiles describe a child, so keep them out of git — `.gitignore` already covers
+`profiles/` and `*.profile.json`. Put them wherever `.yoto-mcp-config.json` lives, so they
+survive restarts.
+
+**Podcast audio downloaded this way is for personal use only.** The skill tells the agent
+to say so when setting the feature up.

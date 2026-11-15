@@ -64,6 +64,85 @@ If the token file sits somewhere ephemeral (a container's `$HOME`), say once tha
 6. **Apply**: `yoto-set-card-art` with `coverPath` and `icons: [{track, iconPath}, ...]`.
 7. Tell the user to re-sync the player to see changes.
 
+## Proactive discovery by child profile
+
+Finds content that fits one specific child and proposes it. `tools/yoto-discover.mjs` does
+the mechanical part; every judgement call, and every write to Yoto, stays with the parent.
+
+**Downloading podcast audio is for personal use only.** Say so once while setting this up,
+and don't help turn a card into anything shared or distributed.
+
+### 1. The profile
+
+One file per child, somewhere that survives restarts (next to `.yoto-mcp-config.json`, not
+in a container's `$HOME`). `node tools/yoto-discover.mjs <path> init` writes the skeleton.
+Never commit these files — they describe a child.
+
+- `name`
+- `birth` — **`"YYYY-MM"`, never an age.** Month and year; the day is not collected. Age is
+  recomputed from it on every run, so the profile cannot go stale.
+- `languages` — e.g. `["he", "en"]`
+- `interests` — animals, the human body, history, stories, music…
+- `searchTerms` — the interests written out per language, e.g.
+  `{"he": ["חיות", "גוף האדם"], "en": ["animal facts kids"]}`. iTunes exposes no language
+  field at all, so language comes from the search terms plus `country`: without terms in
+  Hebrew, a Hebrew-speaking child gets English results only.
+- `country` — iTunes storefront, e.g. `IL`
+- optional: `preferredLengthMinutes`, `avoid` (unwanted content), `notes`
+
+If there is no profile, offer to build one and ask for all of it **in one short
+conversation**, not one question per turn. Then invite the parent to add anything else
+about the child in their own words and put it in `notes`. "Obsessed with sharks since the
+summer", "won't sit still for anything over ten minutes" is what makes a later suggestion
+land.
+
+### 2. The scheduled scan
+
+Ask how often (default: **monthly**) and create a scheduled task with whatever the host
+offers. Record the answer in `schedule`.
+
+Each run is `node tools/yoto-discover.mjs <profile> scan`, which prints JSON and:
+
+- recomputes the age — widen what you consider accordingly, since something that was a
+  stretch six months ago may fit now;
+- re-reads every feed in `feeds` and returns only episodes past that feed's pointer, which
+  is how new episodes of podcasts that are already cards get found;
+- searches iTunes per search term × language × {podcast, music}, with `country`;
+- drops explicit items, and anything already in `feeds` or `history`.
+
+A web search alongside this is worth doing for anything iTunes indexes poorly — local and
+Hebrew children's content especially.
+
+Then **you** apply the filters that need judgement: age fit, language, `avoid`, and
+quality. For quality use `episodeCount` and `monthsSinceLatest`: a show last touched two
+years ago is probably dead, and a "show" with one episode is probably not a show. `genres`
+is a hint, not proof.
+
+### 3. Proposing — never act alone
+
+Send a table: name, one-line description, length, **why it fits this child in particular**,
+and a recommendation (new card, or add to an existing one). "She likes animals" is not a
+reason; "ten-minute animal quizzes, and she has been asking about predators" is.
+
+Then wait for approval. Before creating anything, always ask two things:
+
+1. upload the audio files, or link the RSS feed?
+2. how many cards to split it across?
+
+**If nothing is new, send nothing at all.** A monthly task that reports "nothing new this
+month" teaches the parent to ignore it.
+
+### 4. After approval
+
+Create it as in the pipeline above — upload, fill each card up to the Yoto limit, then
+cover and icons. Then write down what happened, so nothing is ever proposed twice:
+
+- `record suggested <id> <title>` for everything you put in the table, and
+  `record accepted|rejected <id> <title>` once the parent decides
+- `track <cardId> <feedUrl> <title>` when a podcast becomes a card, so later runs pick up
+  its new episodes
+- `seen <feedUrl> <guid> <isoDate>` once episodes are actually on a card
+
 ## Editing
 
 - List / remove (renumbers) / rename a chapter: `node tools/yoto-chapters.mjs <cardId> list|remove <n>|rename <n> <title>`.
