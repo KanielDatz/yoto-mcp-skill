@@ -1,0 +1,5 @@
+.yoto-mcp-config.json
+node_modules/
+dist/
+out/
+out-*/
