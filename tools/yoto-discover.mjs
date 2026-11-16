@@ -16,6 +16,7 @@
 // seen, and sorting.
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { lookup as dnsLookup } from "node:dns/promises";
 
 const UA = "yoto-discover/1.0 (+https://github.com/KanielDatz/yoto-mcp-skill)";
 
@@ -277,6 +278,188 @@ async function findShows(profile) {
     .sort((a, b) => (a.monthsSinceLatest ?? 999) - (b.monthsSinceLatest ?? 999));
 }
 
+// ---------- vetting downloads ----------
+
+// Audio URLs come from feeds nobody here controls, so nothing is downloaded
+// before it is checked. Signatures are read from the first bytes rather than
+// trusting Content-Type, which the server chooses.
+const AUDIO_MAGIC = [
+  { name: "mp3", test: (b) => b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33 },
+  { name: "mp3", test: (b) => b[0] === 0xff && (b[1] & 0xe0) === 0xe0 },
+  { name: "mp4/m4a", test: (b) => b.slice(4, 8).toString("latin1") === "ftyp" },
+  { name: "ogg/opus", test: (b) => b.slice(0, 4).toString("latin1") === "OggS" },
+  { name: "flac", test: (b) => b.slice(0, 4).toString("latin1") === "fLaC" },
+  {
+    name: "wav",
+    test: (b) =>
+      b.slice(0, 4).toString("latin1") === "RIFF" && b.slice(8, 12).toString("latin1") === "WAVE",
+  },
+  { name: "wma/asf", test: (b) => b[0] === 0x30 && b[1] === 0x26 && b[2] === 0xb2 && b[3] === 0x75 },
+];
+
+// Things that must never be downloaded and handed to ffmpeg, a shell, or Yoto.
+const HOSTILE_MAGIC = [
+  { name: "Windows executable", test: (b) => b[0] === 0x4d && b[1] === 0x5a },
+  { name: "Linux executable", test: (b) => b.slice(0, 4).toString("latin1") === "\x7fELF" },
+  { name: "Mach-O / Java class", test: (b) => b[0] === 0xca && b[1] === 0xfe && b[2] === 0xba && b[3] === 0xbe },
+  { name: "zip archive (also jar/apk/office)", test: (b) => b[0] === 0x50 && b[1] === 0x4b && (b[2] === 3 || b[2] === 5) },
+  { name: "rar archive", test: (b) => b.slice(0, 4).toString("latin1") === "Rar!" },
+  { name: "7z archive", test: (b) => b[0] === 0x37 && b[1] === 0x7a && b[2] === 0xbc && b[3] === 0xaf },
+  { name: "gzip archive", test: (b) => b[0] === 0x1f && b[1] === 0x8b },
+  { name: "shell script", test: (b) => b[0] === 0x23 && b[1] === 0x21 },
+  { name: "PDF", test: (b) => b.slice(0, 5).toString("latin1") === "%PDF-" },
+];
+
+function looksLikeMarkup(b) {
+  const head = b.slice(0, 200).toString("latin1").trim().toLowerCase();
+  return head.startsWith("<!do") || head.startsWith("<htm") || head.startsWith("<?xml") || head.startsWith("<rss");
+}
+
+function isPrivateIp(ip) {
+  if (ip.includes(":")) {
+    const v = ip.toLowerCase();
+    if (v === "::1" || v === "::") return true;
+    if (/^f[cd]/.test(v) || v.startsWith("fe8") || v.startsWith("fe9") || v.startsWith("fea") || v.startsWith("feb"))
+      return true;
+    const mapped = /::ffff:(\d+\.\d+\.\d+\.\d+)/.exec(v);
+    return mapped ? isPrivateIp(mapped[1]) : false;
+  }
+  const p = ip.split(".").map(Number);
+  if (p.length !== 4 || p.some((n) => Number.isNaN(n))) return false;
+  const [a, b] = p;
+  return (
+    a === 0 || a === 10 || a === 127 ||
+    (a === 169 && b === 254) ||            // link-local, incl. cloud metadata
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 100 && b >= 64 && b <= 127)     // CGNAT
+  );
+}
+
+// Never trust a server-supplied name: it reaches the filesystem.
+function safeFilename(urlStr, format) {
+  let base = "";
+  try {
+    base = decodeURIComponent(new URL(urlStr).pathname.split("/").pop() || "");
+  } catch {}
+  base = base.replace(/[\x00-\x1f\x7f]/g, "").replace(/[/\\]/g, "").replace(/^[.\-\s]+/, "");
+  base = base.replace(/[^\p{L}\p{N}._\- ]/gu, "_").trim();
+  if (!base || base === "." || base === "..") base = "audio";
+  if (base.length > 80) base = base.slice(0, 80);
+  const ext = (format.split("/")[0] || "bin").replace(/[^a-z0-9]/g, "");
+  return /\.[a-z0-9]{2,4}$/i.test(base) ? base : `${base}.${ext}`;
+}
+
+async function vet(urlStr, maxBytes) {
+  const reasons = [];
+  const chain = [];
+  let current = urlStr;
+  let res = null;
+
+  for (let hop = 0; hop < 6; hop++) {
+    let u;
+    try {
+      u = new URL(current);
+    } catch {
+      return { url: urlStr, verdict: "dangerous", reasons: ["not a valid URL"] };
+    }
+    if (u.protocol !== "https:" && u.protocol !== "http:") {
+      return { url: urlStr, verdict: "dangerous", reasons: [`refusing scheme ${u.protocol}`], redirectChain: chain };
+    }
+    if (u.protocol === "http:") reasons.push("plain http, not https");
+
+    try {
+      const addrs = await dnsLookup(u.hostname, { all: true });
+      const bad = addrs.filter((a) => isPrivateIp(a.address));
+      if (bad.length) {
+        return {
+          url: urlStr,
+          verdict: "dangerous",
+          reasons: [`${u.hostname} resolves to a private address (${bad.map((b) => b.address).join(", ")})`],
+          redirectChain: chain,
+        };
+      }
+    } catch {
+      // Behind an egress proxy local DNS may not resolve; the byte checks below
+      // still apply, so note it rather than blocking.
+      reasons.push(`could not resolve ${u.hostname} locally to check for a private address`);
+    }
+
+    chain.push(current);
+    res = await fetch(current, {
+      headers: { "User-Agent": UA, Accept: "*/*", Range: "bytes=0-2047" },
+      redirect: "manual",
+    });
+    const loc = res.headers.get("location");
+    if (res.status >= 300 && res.status < 400 && loc) {
+      try { res.body?.cancel(); } catch {}
+      current = new URL(loc, current).toString();
+      continue;
+    }
+    break;
+  }
+
+  if (!res || !res.ok) {
+    return { url: urlStr, verdict: "suspicious", reasons: [`HTTP ${res ? res.status : "no response"}`], redirectChain: chain };
+  }
+
+  const declaredType = (res.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+  const rangeTotal = /\/(\d+)\s*$/.exec(res.headers.get("content-range") || "")?.[1];
+  const contentLength = Number(rangeTotal ?? res.headers.get("content-length") ?? NaN);
+
+  // Read only the head, then stop: an oversized or hostile body is never pulled down.
+  const reader = res.body.getReader();
+  const chunks = [];
+  let got = 0;
+  while (got < 2048) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(Buffer.from(value));
+    got += value.length;
+  }
+  try { await reader.cancel(); } catch {}
+  const head = Buffer.concat(chunks);
+
+  const hostile = HOSTILE_MAGIC.find((m) => m.test(head));
+  if (hostile) {
+    return {
+      url: urlStr, finalUrl: current, verdict: "dangerous",
+      reasons: [`content is a ${hostile.name}, not audio`],
+      declaredType, contentLength, redirectChain: chain,
+    };
+  }
+  if (looksLikeMarkup(head)) {
+    return {
+      url: urlStr, finalUrl: current, verdict: "dangerous",
+      reasons: ["content is HTML/XML, not audio - usually an error, login or paywall page"],
+      declaredType, contentLength, redirectChain: chain,
+    };
+  }
+
+  const match = AUDIO_MAGIC.find((m) => m.test(head));
+  const detectedFormat = match ? match.name : null;
+  if (!detectedFormat) reasons.push("no recognised audio signature in the first bytes");
+  if (declaredType && !declaredType.startsWith("audio/") && declaredType !== "application/octet-stream")
+    reasons.push(`server declared ${declaredType}, not an audio type`);
+  if (detectedFormat && declaredType.startsWith("audio/") === false && declaredType)
+    reasons.push(`declared type ${declaredType} disagrees with detected ${detectedFormat}`);
+  if (Number.isFinite(contentLength)) {
+    if (contentLength > maxBytes)
+      reasons.push(`${(contentLength / 1048576).toFixed(0)} MB exceeds the ${(maxBytes / 1048576).toFixed(0)} MB cap`);
+    if (contentLength < 10000) reasons.push(`only ${contentLength} bytes - too small to be an episode`);
+  } else {
+    reasons.push("server gave no size");
+  }
+
+  const verdict = !detectedFormat || reasons.some((r) => /exceeds|too small/.test(r)) ? "suspicious" : reasons.length ? "safe" : "safe";
+  return {
+    url: urlStr, finalUrl: current, verdict,
+    reasons, declaredType, contentLength: Number.isFinite(contentLength) ? contentLength : null,
+    detectedFormat, redirectChain: chain,
+    suggestedFilename: safeFilename(current, detectedFormat || "bin"),
+  };
+}
+
 // ---------- commands ----------
 
 const [, , profilePath, cmd, ...rest] = process.argv;
@@ -289,6 +472,7 @@ if (!profilePath || !cmd) {
       "  age                                        age today, from birth",
       "  scan                                       JSON: new episodes + new shows",
       "  probe <feedUrl>                            inspect any feed found elsewhere",
+      "  vet <url...> [--max-mb=N]                  check audio URLs BEFORE downloading",
       "  record suggested|accepted|rejected <id> <title...>",
       "  seen <feedUrl> <guid> <isoDate>            advance a feed's pointer",
       "  track <cardId> <feedUrl> [--auto] <title...>  follow a feed for a card",
@@ -346,6 +530,28 @@ switch (cmd) {
 
   // Brings a feed found anywhere - web search, Spotify, a station's own site -
   // into the same pipeline, without tracking it first.
+  // Run before downloading anything. Reads only the first bytes.
+  case "vet": {
+    const urls = rest.filter((r) => !r.startsWith("--"));
+    const capArg = rest.find((r) => r.startsWith("--max-mb="));
+    const maxBytes = capArg ? Number(capArg.split("=")[1]) * 1048576 : CARD_LIMITS.maxTrackBytes * 2;
+    if (!urls.length) {
+      console.error("usage: vet <url...> [--max-mb=N]");
+      process.exit(1);
+    }
+    const results = [];
+    for (const u of urls) {
+      try {
+        results.push(await vet(u, maxBytes));
+      } catch (err) {
+        results.push({ url: u, verdict: "suspicious", reasons: [`check failed: ${err.message}`] });
+      }
+    }
+    console.log(JSON.stringify(results.length === 1 ? results[0] : results, null, 2));
+    if (results.some((r) => r.verdict === "dangerous")) process.exit(2);
+    break;
+  }
+
   case "probe": {
     const [feedUrl] = rest;
     if (!feedUrl) {

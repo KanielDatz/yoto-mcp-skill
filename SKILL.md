@@ -70,6 +70,42 @@ the address bar, pass it to `yoto-auth-complete`, and confirm with `yoto-check-a
 If the token file sits somewhere ephemeral (a container's `$HOME`), say once that
 `YOTO_CONFIG_PATH` should point at persistent storage, or they re-authenticate every restart.
 
+## Check before downloading
+
+Audio URLs come from feeds and search results nobody here controls, and whatever arrives
+gets handed to ffmpeg, to the filesystem, and to the parent's Yoto account. **Vet every URL
+before downloading it**, during an automatic update as much as a card built by hand:
+
+```bash
+node tools/yoto-discover.mjs <profile> vet <url...> [--max-mb=N]
+```
+
+It reads only the first couple of kilobytes, follows redirects one hop at a time, checking
+each, and returns a verdict:
+
+- **`dangerous` — don't download it, and say so.** The URL isn't http(s); or the host
+  resolves to a private or link-local address, which would aim the download at something on
+  the parent's own network or at a cloud metadata service; or the bytes are an executable,
+  archive, script, PDF or HTML page rather than audio. HTML is usually an error, login or
+  paywall page. Exit code is 2.
+- **`suspicious` — stop and ask.** No recognisable audio signature, a declared type that
+  disagrees with the actual bytes, something far over the per-track limit, or a file too
+  small to be an episode.
+- **`safe`** — known audio signature, sane size. Still read `reasons`; it can carry notes
+  that matter.
+
+The signature is read from the bytes, not from `Content-Type`, because the server chooses
+the latter.
+
+Two things it does not do, which are on you:
+
+- **Use `suggestedFilename`**, never the name in the URL or in `Content-Disposition`. It
+  comes back stripped of path separators, traversal, control characters and null bytes, and
+  length-capped, with non-Latin names left intact. **Quote it** anywhere it reaches a shell.
+- **This is not a virus scan.** It shows the bytes begin like audio; it cannot show that a
+  malformed file won't upset a decoder. Keep downloads in a working directory, never
+  somewhere that gets executed.
+
 ## Pipeline for a new card (art is a default step, not optional)
 
 1. **Find / prepare the audio** (yt-dlp, RSS, files). Latest yt-dlp is required — old builds fail with "Requested format is not available". If a feed exists, this is where you settle RSS vs downloaded files — see "RSS or downloaded files" below.
@@ -220,7 +256,8 @@ On a scheduled run, for each feed with `autoAdd: true` and something new:
 2. **Skip anything marked `tooLongForTrack`** — it is over the 60-minute per-track limit
    and cannot be added as one track. Say which episodes you skipped and why. Never drop one
    silently.
-3. **Apply `avoid`** as you would for anything else.
+3. **Apply `avoid`**, and **`vet` each episode's audio URL** before downloading it — an
+   unattended run is exactly where an unchecked download would go unnoticed.
 4. **Add the tracks in order**, then make icons for them. Art stays a default step here too.
 5. **Advance the pointer** with `seen`, so the next run starts after these.
 6. **Report what you did** — a short summary, not a question: which episodes went on which

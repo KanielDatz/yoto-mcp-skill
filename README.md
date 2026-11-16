@@ -132,7 +132,15 @@ node tools/yoto-discover.mjs ~/yoto/noa.json age      # age today, from birth mo
 node tools/yoto-discover.mjs ~/yoto/noa.json scan     # JSON: new episodes + new shows
 node tools/yoto-discover.mjs ~/yoto/noa.json probe <feedUrl>   # inspect any feed
 node tools/yoto-discover.mjs ~/yoto/noa.json autoadd <feedUrl> on   # keep a card updated
+node tools/yoto-discover.mjs ~/yoto/noa.json vet <url>         # check BEFORE downloading
 ```
+
+`vet` runs on every audio URL before it is downloaded. Feeds are not trusted input, so it
+reads the first couple of kilobytes rather than the server's `Content-Type`, follows
+redirects a hop at a time, and refuses anything that is not http(s), resolves to a private
+or link-local address, or turns out to be an executable, archive, script, PDF or HTML page.
+It also returns a sanitised filename — path traversal, control characters and null bytes
+removed, length capped, non-Latin names kept — to use instead of the one in the URL.
 
 A podcast that is already a card can be kept up to date automatically: with `autoadd` on
 for that feed, scheduled runs add new episodes to the card and make icons for them, then
