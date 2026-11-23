@@ -184,10 +184,8 @@ Profiles describe a child, so keep them out of git — `.gitignore` already cove
 `profiles/` and `*.profile.json`. Put them wherever `.yoto-mcp-config.json` lives, so they
 survive restarts.
 
-**Sources.** The skill's default assumption is a parent moving audio they already have, or
-a podcast feed, onto their own child's player — so it builds the card and gets out of the
-way. Where something genuinely can't be fetched (commercial music on YouTube, Spotify
-exclusives) it says so once in a sentence and then points at what does work: files they
-already own, a CD, a store that sells downloads, or the same stories as a podcast. It is
-told not to lecture, not to raise it twice, and never to leave someone with a refusal and
-no next step.
+**Sources.** The parent decides what goes on their family's card; the skill builds it.
+Files they have, CDs, bought MP3s, podcast feeds, open-licensed material and `yt-dlp` audio
+for their own child are all just normal input. The skill is told not to lecture, not to
+raise the subject twice, and never to answer with a refusal and no way forward. The one
+thing it won't help with is distributing a card beyond the family.

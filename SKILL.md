@@ -70,39 +70,20 @@ the address bar, pass it to `yoto-auth-complete`, and confirm with `yoto-check-a
 If the token file sits somewhere ephemeral (a container's `$HOME`), say once that
 `YOTO_CONFIG_PATH` should point at persistent storage, or they re-authenticate every restart.
 
-## What can go on a card
+## Sources
 
-A parent making a mixtape for their own child is the ordinary case here, not an edge case
-to be interrogated. Be useful, and keep this to one sentence when it comes up at all.
+This puts audio on a child's own player. The parent decides what goes on their family's
+card; your job is to build it.
 
-**Just build the card — no discussion needed:**
+Normal and unremarkable, so just get on with it: files they already have, a CD they own,
+bought MP3s, podcast feeds, public-domain and openly licensed material, anything a creator
+offers, and audio taken with `yt-dlp` for their own child to listen to.
 
-- **Files the parent already has.** Their own recordings, MP3s they bought, a CD they own
-  ripped to disk, an old iTunes library. Moving audio you own onto your own child's player
-  is what this skill is mostly for.
-- **Podcast enclosures.** A feed exists in order to be downloaded — that is what an
-  enclosure is for.
-- **Public-domain and openly licensed material**, including YouTube videos the uploader
-  published under Creative Commons.
-- **Anything the creator hands out themselves.** Plenty of children's artists, stations and
-  libraries publish downloads or a feed.
+The one line that matters: don't help turn a card into something distributed beyond the
+family — sharing audio publicly, selling cards, copying a catalogue wholesale.
 
-**One thing that genuinely doesn't work:** commercial music and shows can't be pulled off
-YouTube — that's against YouTube's terms whatever tool is used, Premium included. It is a
-terms question, not a judgement about the parent or about music they already own.
-
-So say it **once**, in a sentence, and spend the rest of your effort on what does work:
-
-- Ask whether they already own it — a CD, bought MP3s, an old library. They very often do,
-  and then there is nothing to discuss.
-- Check whether the artist, station or publisher offers a feed or a download.
-- Look for the same material on a store that sells downloads.
-- Look for it as a podcast or audiobook; children's stories and songs frequently live there
-  too.
-
-**Never** lecture, never raise it a second time, and never leave a parent holding a refusal
-and nothing else — always hand them the next thing to try. If they tell you they own the
-material, take them at their word and get on with building the card.
+Never lecture about any of this, never raise it twice, and never answer a request with a
+refusal and no way forward.
 
 ## Check before downloading
 
@@ -160,9 +141,7 @@ you create; a Yoto Card linked from the app library is not subject to them.
 Finds content that fits one specific child and proposes it. `tools/yoto-discover.mjs` does
 the mechanical part; every judgement call, and every write to Yoto, stays with the parent.
 
-Sources and what can go on a card are covered in "What can go on a card" above — the short
-version is that a parent's own files and podcast feeds are the normal case, and nothing
-here gets raised twice.
+Sources are covered under "Sources" above.
 
 ### 1. The profile
 
@@ -215,10 +194,8 @@ is yours, with web search:
   shows that publish only on their own site. Also just ask the parent where they get
   podcasts — they usually know the local landscape better than any index.
 - **YouTube is a real source**, especially for songs and stories in languages that
-  podcasts underserve. `yt-dlp` takes the audio (latest version — see the pipeline) for
-  material that is open to it: Creative Commons uploads, public-domain recordings, and
-  channels whose creator offers downloads. Commercial music is the exception — see "What
-  can go on a card". A channel has a feed at
+  podcasts underserve. `yt-dlp` takes the audio (latest version — see the pipeline). A
+  channel has a feed at
   `https://www.youtube.com/feeds/videos.xml?channel_id=<id>` which `probe` reads, so a
   channel can be watched for new uploads exactly like a podcast — but it carries no audio,
   so `downloadable` is false and YouTube can only ever be delivered as **files, never as a
