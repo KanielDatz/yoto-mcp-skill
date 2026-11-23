@@ -184,5 +184,10 @@ Profiles describe a child, so keep them out of git — `.gitignore` already cove
 `profiles/` and `*.profile.json`. Put them wherever `.yoto-mcp-config.json` lives, so they
 survive restarts.
 
-**Podcast audio downloaded this way is for personal use only.** The skill tells the agent
-to say so when setting the feature up.
+**Sources.** The skill's default assumption is a parent moving audio they already have, or
+a podcast feed, onto their own child's player — so it builds the card and gets out of the
+way. Where something genuinely can't be fetched (commercial music on YouTube, Spotify
+exclusives) it says so once in a sentence and then points at what does work: files they
+already own, a CD, a store that sells downloads, or the same stories as a podcast. It is
+told not to lecture, not to raise it twice, and never to leave someone with a refusal and
+no next step.
