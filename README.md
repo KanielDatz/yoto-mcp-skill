@@ -5,7 +5,9 @@ Create Yoto MYO cards from an agent (Claude Code / NanoClaw / any MCP client): u
 - `SKILL.md` — the workflow the agent follows (art generation is a default step of the new-card pipeline)
 - `server/` — the Yoto MCP server (Node/TypeScript)
 - `art/` — pixel-art generator: `make.mjs` (Science-Yuck card), `make-ouz.mjs` (template for a new card), Rubik font
+- `art/styles.mjs` — covers in eight styles (pixel, balloon, isometric, risograph, watercolour, paper cut-out, crayon, clay) from a JSON spec, a side-by-side style gallery, and palettes from source artwork
 - `art/labels.mjs` — A4 PDF of sticker labels for the physical cards
+- `tools/yoto-brief.mjs` — what a source's audio is about (descriptions, chapters, transcripts, captions, tags) and its own artwork, gathered before designing the cover
 - `tools/yoto-chapters.mjs` — list / remove / rename chapters on an existing card
 - `tools/yoto-discover.mjs` — per-child profiles and scheduled discovery of new content
 
@@ -112,7 +114,21 @@ FONTCONFIG_FILE=$PWD/fonts.conf node make-ouz.mjs ./out   # writes icon-*.png, c
 
 Icons must be 16x16 PNG, cover ~638x1011 portrait. Apply with the `yoto-set-card-art` tool. To make art for a new card, copy `make-ouz.mjs`, replace the `ICONS` grids (palette chars at the top of the file) and the cover SVG text/composition.
 
-## 4a. Printable labels
+## 4a. Content brief and cover styles
+
+```bash
+node tools/yoto-brief.mjs ./brief feed <feedUrl>      # or: youtube <url> | file <audio...> | image <url...>
+FONTCONFIG_FILE=$PWD/art/fonts.conf node art/styles.mjs gallery gallery.png spec.json
+FONTCONFIG_FILE=$PWD/art/fonts.conf node art/styles.mjs render spec.json cover.png
+```
+
+The brief collects descriptions, chapters, transcripts/captions and tags, plus the source's
+own artwork (vetted, re-encoded to PNG) with its colour palette. The cover is then designed
+from that in one of eight styles; `gallery` renders the same cover in all of them so the
+parent can choose. Track icons stay 16x16 pixel art. `youtube` needs `yt-dlp`, `file` needs
+`ffprobe`/`ffmpeg`; behind a proxy run Node with `NODE_USE_ENV_PROXY=1`.
+
+## 4b. Printable labels
 
 ```bash
 node art/labels.mjs list                                   # your cards, and which have a cover
