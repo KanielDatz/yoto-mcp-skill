@@ -3,7 +3,7 @@
 // its cover, so the art shows the real characters and motifs instead of a guess from a title.
 //
 //   node yoto-brief.mjs <outDir> feed <feedUrl|feed.xml> [--episode=<text>] [--max=N]
-//   node yoto-brief.mjs <outDir> youtube <url>          (needs yt-dlp)
+//   node yoto-brief.mjs <outDir> youtube <url>          (needs yt-dlp; $YTDLP overrides the command)
 //   node yoto-brief.mjs <outDir> file <audio...>        (needs ffprobe/ffmpeg)
 //   node yoto-brief.mjs <outDir> image <url...>         any other artwork found for the source
 //
@@ -46,7 +46,14 @@ async function keepImage(buf, label) {
     return { label, error: "not an image" };
   }
   const path = join(artDir, `${String(++n).padStart(2, "0")}-${label.replace(/[^\p{L}\p{N}]+/gu, "-").slice(0, 40)}.png`);
-  await sharp(buf, { limitInputPixels: 40e6 }).resize(1200, 1200, { fit: "inside", withoutEnlargement: true }).png().toFile(path);
+  // Trim plain empty margins (a uniform border, judged from the corner pixel) so the subject
+  // fills the frame when it goes on a cover; keep the original if trimming fails.
+  let img = await sharp(buf, { limitInputPixels: 40e6 }).png().toBuffer();
+  try {
+    const trimmed = await sharp(img).trim({ threshold: 18 }).png().toBuffer({ resolveWithObject: true });
+    if (trimmed.info.width >= 32 && trimmed.info.height >= 32) img = trimmed.data;
+  } catch {}
+  await sharp(img).resize(1200, 1200, { fit: "inside", withoutEnlargement: true }).png().toFile(path);
   const { palette } = await import("../art/styles.mjs");
   const entry = { label, path, palette: (await palette(path)).map((p) => p.hex) };
   art.push(entry);
@@ -119,12 +126,25 @@ async function briefFeed(src) {
   return { source: "feed", show: { ...show, artwork: showArt }, items: out };
 }
 
+// $YTDLP lets you point at the nightly build or the proxy wrapper, e.g.
+// YTDLP=./yt-dlp  or  YTDLP="python3 tools/yt-dlp-proxy.py". --js-runtimes node gets past
+// YouTube's JS challenge on current builds; older builds that don't know it run without it.
+async function ytdlp(args) {
+  const [cmd, ...pre] = (process.env.YTDLP || "yt-dlp").split(/\s+/).filter(Boolean);
+  try {
+    return await run(cmd, [...pre, "--js-runtimes", "node", ...args], { maxBuffer: 64 << 20 });
+  } catch (e) {
+    if (!/no such option|unrecognized arguments/i.test(String(e.stderr || e.message))) throw e;
+    return run(cmd, [...pre, ...args], { maxBuffer: 64 << 20 });
+  }
+}
+
 async function briefYoutube(url) {
   let meta;
   try {
-    meta = JSON.parse((await run("yt-dlp", ["-J", "--flat-playlist", "--no-warnings", url], { maxBuffer: 64 << 20 })).stdout);
+    meta = JSON.parse((await ytdlp(["-J", "--flat-playlist", "--no-warnings", url])).stdout);
   } catch (e) {
-    throw new Error(`yt-dlp failed (is it installed and up to date?): ${e.message.split("\n")[0]}`);
+    throw new Error(`yt-dlp failed - try the nightly build (SKILL.md, "yt-dlp"): ${e.message.split("\n")[0]}`);
   }
   const thumb = (m) => m.thumbnail || (m.thumbnails || []).slice(-1)[0]?.url;
   if (meta._type === "playlist") {

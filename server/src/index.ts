@@ -7,7 +7,8 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import fetch from "node-fetch";
-import { readFile, writeFile } from "fs/promises";
+import { readFile, writeFile, mkdir } from "fs/promises";
+import { dirname } from "path";
 import { randomBytes, createHash } from "crypto";
 
 // Configuration
@@ -48,7 +49,13 @@ interface YotoConfig {
 }
 
 // Load/save configuration
+// Tokens from a sign-in that worked but couldn't be written to disk yet (e.g. a stale
+// YOTO_CONFIG_PATH). Kept in memory so the parent doesn't have to approve again: the code
+// is single-use, so re-running yoto-auth-complete just retries the save.
+let unsavedConfig: YotoConfig | null = null;
+
 async function loadConfig(): Promise<YotoConfig> {
+  if (unsavedConfig) return unsavedConfig;
   try {
     const data = await readFile(CONFIG_PATH, "utf-8");
     return JSON.parse(data);
@@ -58,6 +65,7 @@ async function loadConfig(): Promise<YotoConfig> {
 }
 
 async function saveConfig(config: YotoConfig): Promise<void> {
+  await mkdir(dirname(CONFIG_PATH), { recursive: true });
   await writeFile(CONFIG_PATH, JSON.stringify(config, null, 2));
 }
 
@@ -90,7 +98,14 @@ async function authenticate(): Promise<string> {
           refreshToken: data.refresh_token || config.refreshToken,
           expiresAt: Date.now() + data.expires_in * 1000,
         };
-        await saveConfig(newConfig);
+        try {
+          await saveConfig(newConfig);
+          unsavedConfig = null;
+        } catch (err) {
+          // keep the refreshed token usable (refresh tokens can rotate) and retry the save later
+          unsavedConfig = newConfig;
+          console.error(`Could not save refreshed token to ${CONFIG_PATH}:`, err);
+        }
         return data.access_token;
       }
     } catch (error) {
@@ -655,6 +670,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "yoto-auth-complete": {
+        if (unsavedConfig) {
+          await saveConfig(unsavedConfig);
+          unsavedConfig = null;
+          return {
+            content: [{ type: "text", text: `✅ Saved the Yoto sign-in to ${CONFIG_PATH}.` }],
+          };
+        }
         if (!pendingAuth) {
           return {
             content: [
@@ -666,9 +688,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error("Missing required 'code' argument");
         }
         const { code } = args as { code: string };
+        // A failed exchange keeps pendingAuth, so a fresh code from the same link still works.
         const config = await exchangeCodeForToken(code, pendingAuth.code_verifier);
         pendingAuth = null;
-        await saveConfig(config);
+        try {
+          await saveConfig(config);
+        } catch (err: any) {
+          unsavedConfig = config;
+          return {
+            content: [
+              {
+                type: "text",
+                text: `⚠️ Signed in, but the token couldn't be saved to ${CONFIG_PATH} (${err.message}). Point YOTO_CONFIG_PATH at persistent storage or fix that directory, then call yoto-auth-complete again - no new code needed. Until then the sign-in works only while this server keeps running.`,
+              },
+            ],
+          };
+        }
         return {
           content: [
             { type: "text", text: "✅ Successfully authenticated with Yoto API!" },
