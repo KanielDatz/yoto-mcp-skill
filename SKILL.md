@@ -424,12 +424,9 @@ ink well, survives small hands). Say this the first time labels come up.
    <mm>` the one they still have.
 5. **The cut line.** When the space under the labels can still take at least one label, the
    PDF has a dashed line across the full width (`leftover` in the output). Just under it the
-   piece gets its number and size ("#3  210 x 177 mm") and a row of ▼ arrows. Tell the parent:
+   piece gets its number and size ("#3  210 x 177 mm"). Tell the parent:
    - **cut along the dashed line first and keep the lower piece** — it goes back in the
      printer next time; then cut out the labels from the top part;
-   - **the arrows point at the end that goes into the printer first** next time (the
-     original edge of the sheet, not the hand-cut one), printed side the same way up as
-     today;
    - they don't need to remember any of it — you have the piece on record, and the number
      is printed on it in case it gets mixed up with others.
    No `leftover` means the rest is too small to reuse; say nothing about it.
@@ -439,8 +436,10 @@ ink well, survives small hands). Say this the first time labels come up.
    - Use the manual / rear feed tray if the printer has one; sticker sheets are thick.
    - Set the paper type to matte photo or label paper, best quality.
    - **On a leftover piece:** set the paper size in the print dialog to a custom size of
-     exactly that piece (e.g. 210 x 114 mm), and feed it in the way its arrows point. The
-     marked strip falls in the margin of the new print, so nothing is printed over it. Very short pieces may be below the printer's
+     exactly that piece (e.g. 210 x 114 mm). Feed it **straight edge first** — the sheet's
+     original edge, not the hand-cut one, which can catch — printed side the same way up as
+     the first time. The strip with the number falls in the margin of the new print, so
+     nothing is printed over it. Very short pieces may be below the printer's
      minimum paper length — if the printer refuses one, use a whole sheet.
    - Not sure? Print once on plain paper and hold it against the sticker sheet to the light.
 
