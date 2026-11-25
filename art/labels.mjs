@@ -219,14 +219,18 @@ async function pdf(out, items) {
       start: { x: 0, y: yPt }, end: { x: PAGE_W * MM, y: yPt },
       thickness: 0.6, color: rgb(0.3, 0.3, 0.3), dashArray: [6, 4],
     });
-    // Marker on the piece being kept, in the strip just under the line. That strip becomes the
-    // piece's bottom margin next time, so later labels never print over it.
+    // Marker on the piece being kept, tucked right under the cut line (it may touch it): small
+    // enough to stay inside a 5 mm strip, well within the 8 mm margin the next print on this
+    // piece leaves at that edge, so labels printed later never collide with it.
     const id = record ? st.next++ : null;
     const grey = rgb(0.4, 0.4, 0.4);
-    const note = `${id ? `#${id}    ` : ""}${PAGE_W} x ${leftoverH} mm`;
-    const size = 11;
+    const note = `${id ? `#${id}   ` : ""}${PAGE_W} x ${leftoverH} mm`;
+    const size = 9; // pt; capitals and digits are about 2.3 mm tall
+    const capMm = font.heightAtSize(size, { descender: false }) / MM;
+    const baseline = cutY + 0.4 + capMm; // text starts 0.4 mm below the line
+    if (baseline + 0.6 - cutY > 5) throw new Error("piece marker would be taller than 5 mm");
     page.drawText(note, {
-      x: (PAGE_W * MM - font.widthOfTextAtSize(note, size)) / 2, y: (pageH - cutY - 5.5) * MM,
+      x: (PAGE_W * MM - font.widthOfTextAtSize(note, size)) / 2, y: (pageH - baseline) * MM,
       size, font, color: grey,
     });
     leftover = { id, widthMm: PAGE_W, heightMm: leftoverH, labelsFit: maxCap(leftoverH), nextFlag: id ? `--piece=${id}` : `--sheet=${leftoverH}` };
