@@ -4,6 +4,8 @@ Create Yoto Make-Your-Own cards by chatting with an agent (Claude Code, NanoClaw
 client): it finds and uploads the audio, adds the tracks, draws a cover and a pixel icon for
 every track, and prints stickers for the physical cards.
 
+<p align="center"><img src="docs/demo.gif" alt="A one-minute tour: ask in your own words, it finds the episodes, three covers to pick from, pixel icons, stickers, child profiles and episode updates" width="320"></p>
+
 ![Playful covers and printable stickers](docs/new-features.png)
 
 ## What it does
