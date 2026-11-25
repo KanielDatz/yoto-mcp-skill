@@ -19,7 +19,7 @@
 // enough for a label, a dashed line is drawn across the whole sheet just under them, labelled
 // with the leftover piece's size: cut there and keep the lower piece. It goes back through the
 // printer later. Under the line the piece gets its number and size ("#3  210 x 114 mm",
-// readable from a photo) and arrows pointing at the edge that goes into the printer first.
+// readable from a photo).
 // The piece is recorded in .yoto-labels.json next to the token file:
 //   node labels.mjs pieces               pieces on record
 //   node labels.mjs pieces add <mm>      a piece measured by hand
@@ -221,7 +221,6 @@ async function pdf(out, items) {
     });
     // Marker on the piece being kept, in the strip just under the line. That strip becomes the
     // piece's bottom margin next time, so later labels never print over it.
-    // Arrows point at the factory edge: the end that goes into the printer first.
     const id = record ? st.next++ : null;
     const grey = rgb(0.4, 0.4, 0.4);
     const note = `${id ? `#${id}    ` : ""}${PAGE_W} x ${leftoverH} mm`;
@@ -230,10 +229,6 @@ async function pdf(out, items) {
       x: (PAGE_W * MM - font.widthOfTextAtSize(note, size)) / 2, y: (pageH - cutY - 5.5) * MM,
       size, font, color: grey,
     });
-    const arrow = `M 0 0 H ${4 * MM} L ${2 * MM} ${4.5 * MM} Z`;
-    for (const ax of [12, 55, 151, 194]) {
-      page.drawSvgPath(arrow, { x: (ax - 2) * MM, y: (pageH - cutY - 1.5) * MM, color: grey });
-    }
     leftover = { id, widthMm: PAGE_W, heightMm: leftoverH, labelsFit: maxCap(leftoverH), nextFlag: id ? `--piece=${id}` : `--sheet=${leftoverH}` };
   }
 

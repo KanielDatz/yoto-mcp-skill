@@ -147,8 +147,7 @@ card's cover art, 52 x 83.6 mm with rounded corners (`--exact` for the full 54 x
 size), 5 mm apart, with a thin cut outline (`--no-guide` to drop it). Upright and sideways
 labels are mixed to use the least height (11 per A4 sheet), packed at the top, and when the
 rest of the sheet can still take a label, a dashed line marks where to cut it off,
-and the piece below it is marked with its number and size ("#2  210 x 114 mm") and arrows
-pointing at the end to feed into the printer first. Keep it and print on it next time with
+and the piece below it is marked with its number and size ("#2  210 x 114 mm"). Keep it and print on it next time with
 `--piece=<id>` (or `--sheet=<height>` for a piece cut by hand), setting a custom paper size of
 the same dimensions in the print dialog. Pieces are recorded in `.yoto-labels.json` next to
 the token file; `pieces add <mm>` / `pieces drop <id>` correct the record.
