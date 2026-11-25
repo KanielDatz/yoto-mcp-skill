@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — smaller piece marker
+
+- The leftover piece's number and size now sit right under the cut line, in a strip under
+  5 mm (about 3 mm), so later labels printed on that piece never collide with them.
+
 ## 2026-11-25 — three real cover options
 
 - Every new cover shows exactly three, very different designs: the real picture found for
