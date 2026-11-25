@@ -2,8 +2,10 @@
 //
 //   node styles.mjs list                              style names + one-line descriptions
 //   node styles.mjs render <spec.json> <out.png>      one cover, 638x1011
-//   node styles.mjs gallery <out.png> [spec.json] [--options=balloon,paper+clay,crayon]
-//                                                     the same cover in up to 3 style options
+//   node styles.mjs gallery <out.png> <a.json> <b.json> <c.json>
+//                                                     three different cover designs, numbered 1-3
+//   node styles.mjs gallery <out.png> <spec.json> --options=balloon,paper+clay,crayon
+//                                                     one design in three styles (quick look only)
 //   node styles.mjs palette <image>                   dominant colours of an image (source artwork)
 //
 // Run with FONTCONFIG_FILE=<art/fonts.conf> so the Rubik font is found.
@@ -352,20 +354,22 @@ const SAMPLE = {
   ],
 };
 
-// The options shown to the parent: at most three, so choosing stays easy. An option can be a
-// mix ("paper+clay").
+// The options shown to the parent: exactly three, each its own full design (different
+// picture, layout and style), side by side and numbered. A spec may carry "optionLabel", a
+// few words shown under its number ("the show's own picture").
 export const DEFAULT_OPTIONS = ["balloon", "paper+clay", "crayon"];
 
-async function gallery(out, base, options = DEFAULT_OPTIONS) {
-  if (options.length > 3) throw new Error("show at most 3 options");
-  const thumbW = 300, thumbH = 475, pad = 20, label = 34;
-  const W = options.length * thumbW + (options.length + 1) * pad, H = thumbH + label + 2 * pad;
+async function gallery(out, specs) {
+  if (specs.length > 3) throw new Error("show at most 3 options");
+  const thumbW = 300, thumbH = 475, pad = 20, label = 70;
+  const W = specs.length * thumbW + (specs.length + 1) * pad, H = thumbH + label + 2 * pad;
   const comps = [];
-  for (const [i, name] of options.entries()) {
-    const png = await render({ ...base, style: name });
+  for (const [i, spec] of specs.entries()) {
+    const png = await render(spec);
     const x = pad + i * (thumbW + pad);
     comps.push({ input: await sharp(png).resize(thumbW, thumbH).png().toBuffer(), left: x, top: pad });
-    comps.push({ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${thumbW}" height="${label}"><text x="${thumbW / 2}" y="26" font-size="24" font-family="Rubik" font-weight="800" text-anchor="middle" fill="#333">${i + 1}</text></svg>`), left: x, top: pad + thumbH + 4 });
+    const note = spec.optionLabel ? `<text x="${thumbW / 2}" y="58" font-size="17" font-family="Rubik" text-anchor="middle" fill="#6a5a7a" direction="${/[\u0590-\u06ff]/.test(spec.optionLabel) ? "rtl" : "ltr"}">${esc(spec.optionLabel)}</text>` : "";
+    comps.push({ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${thumbW}" height="${label}"><text x="${thumbW / 2}" y="28" font-size="26" font-family="Rubik" font-weight="800" text-anchor="middle" fill="#333">${i + 1}</text>${note}</svg>`), left: x, top: pad + thumbH + 4 });
   }
   await sharp({ create: { width: W, height: H, channels: 3, background: "#f1efe9" } }).composite(comps).png().toFile(out);
   return out;
@@ -378,10 +382,20 @@ if (isMain) {
     if (cmd === "list") console.log(JSON.stringify(Object.fromEntries(STYLE_NAMES.map((n) => [n, STYLES[n].describe])), null, 2));
     else if (cmd === "render") { writeFileSync(b, await render(JSON.parse(readFileSync(a, "utf8")))); console.log(b); }
     else if (cmd === "gallery") {
+      // gallery <out.png> <a.json> <b.json> <c.json>  - three different designs (the normal case)
+      // gallery <out.png> <spec.json> --options=a,b,c - one design in three styles (quick look)
+      const files = process.argv.slice(4).filter((x) => !x.startsWith("--"));
       const opt = process.argv.find((x) => x.startsWith("--options="));
-      console.log(await gallery(a, b && !b.startsWith("--") ? JSON.parse(readFileSync(b, "utf8")) : SAMPLE, opt ? opt.split("=")[1].split(",") : undefined));
+      const load = (f) => JSON.parse(readFileSync(f, "utf8"));
+      let specs;
+      if (files.length > 1) specs = files.map(load);
+      else {
+        const base = files.length ? load(files[0]) : SAMPLE;
+        specs = (opt ? opt.split("=")[1].split(",") : DEFAULT_OPTIONS).map((st) => ({ ...base, style: st }));
+      }
+      console.log(await gallery(a, specs));
     }
     else if (cmd === "palette") console.log(JSON.stringify(await palette(a), null, 2));
-    else { console.error("usage: node styles.mjs list | render <spec.json> <out.png> | gallery <out.png> [spec.json] [--options=a,b+c,d] | palette <image>"); process.exit(1); }
+    else { console.error("usage: node styles.mjs list | render <spec.json> <out.png> | gallery <out.png> <a.json> <b.json> <c.json> | gallery <out.png> <spec.json> --options=a,b,c | palette <image>"); process.exit(1); }
   } catch (e) { console.error(e.message); process.exit(1); }
 }

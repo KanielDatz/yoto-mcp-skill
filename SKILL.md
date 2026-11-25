@@ -33,8 +33,11 @@ order, and never ask the user something you can establish by looking:
    nothing else can be checked until it is.
 2. `yoto-check-auth`. One call separates two states: a missing `YOTO_CLIENT_ID` comes back
    as that error, anything else means the ID is fine and only the token is missing.
-3. Does `art/node_modules/` exist, and does the `<dir>` in `art/fonts.conf` point at a
-   directory that is actually there? Read the file and look; don't ask.
+3. Does `art/node_modules/` exist **for this platform**, and does the `<dir>` in
+   `art/fonts.conf` point at a directory that is actually there? Read the file and look;
+   don't ask. A `node_modules` installed on the host (macOS) breaks inside a Linux container
+   ("Cannot find module sharp-linux-x64.node"): check with
+   `node -e "require('./art/node_modules/sharp')"` from the repo root before trusting it.
 
 Then fix only the gaps and go straight on to what the user actually asked for. If
 everything checks out, say nothing about setup at all — skip to the pipeline. Announcing
@@ -64,8 +67,17 @@ is expected, nothing is listening there, and it does not mean anything broke. Wi
 warning most people stop and report a failure. Ask them to copy the `code=...` value from
 the address bar, pass it to `yoto-auth-complete`, and confirm with `yoto-check-auth`.
 
-**Art tooling not ready.** `cd art && npm install` (sharp, pdf-lib), and set `<dir>` in
-`art/fonts.conf` to the absolute path of `art/fonts`. Make that edit yourself; don't ask.
+**`yoto-auth-complete` fails with ENOENT.** The server's config path points at a directory
+that doesn't exist (often a stale path from an older install). Fix `YOTO_CONFIG_PATH` so it
+points at persistent storage, or create the directory. A code is single-use: if the sign-in
+itself went through, the server keeps the token and calling `yoto-auth-complete` again (no
+code) saves it; otherwise run `yoto-auth` for a fresh link and tell the parent they need to
+approve once more. Never retry an old code.
+
+**Art tooling not ready.** `cd art && npm install` (sharp, pdf-lib) **inside the environment
+that will run the art scripts** — not on the host for a container, or the other way round.
+Then set `<dir>` in `art/fonts.conf` to the absolute path of `art/fonts`. Make that edit
+yourself; don't ask.
 
 If the token file sits somewhere ephemeral (a container's `$HOME`), say once that
 `YOTO_CONFIG_PATH` should point at persistent storage, or they re-authenticate every restart.
@@ -108,15 +120,23 @@ Two things it does not do, which are on you:
 
 ## Pipeline for a new card (art is a default step, not optional)
 
-1. **Find / prepare the audio** (yt-dlp, RSS, files). Latest yt-dlp is required — old builds fail with "Requested format is not available". If a feed exists, this is where you settle RSS vs downloaded files — see "RSS or downloaded files" below.
+1. **Find / prepare the audio** (files, RSS, yt-dlp). Look in **open sources first**: the
+   parent's own files, YouTube and the open web — RSS feeds, podcast sites, Archive.org, the
+   artist's or channel's own site. iTunes, Spotify and Apple Music are for **metadata only**
+   (track lists, durations, album art), never the audio source. If a feed exists, this is
+   where you settle RSS vs downloaded files — see "RSS or downloaded files" below. For
+   YouTube, see "yt-dlp" below.
 2. **Show a table and wait for approval before touching Yoto**: track #, title, duration, source. If unsure whether content is one long recording or separate songs, ask. One song per track is the usual wish.
-3. **Create the card**: `yoto-upload-audio` with track 1 (title = card title), then `yoto-add-track` for each remaining track *sequentially, in order*. Fix track 1's title afterwards: `node tools/yoto-chapters.mjs <cardId> rename 1 "<title>"`.
-4. **Art — carry straight on; this needs no second approval.** Approving the card covers its
-   art, including its style (up to three options, shown with the step-2 table — see "Cover
-   styles"). First get
+3. **Create the card**: `yoto-upload-audio` with track 1 (title = card title), then `yoto-add-track` for each remaining track **one at a time, in order** — wait for each to finish before the next; parallel adds can overwrite each other. Fix track 1's title afterwards: `node tools/yoto-chapters.mjs <cardId> rename 1 "<title>"`. Finish with `yoto-get-card` and check the track count matches the table.
+4. **Art — carry straight on.** Approving the card covers making its art; you show the
+   result before applying it (step 6). The three cover options (real picture, drawing,
+   different drawing) go with the step-2 table — see "Cover styles". First get
    the **content brief** for the source: `node tools/yoto-brief.mjs <workDir>/brief feed|youtube|file|image ...`
    (see "Know the content first"). Design from what the audio is actually about and what the
    source itself looks like, not from the title: one icon per track plus a cover.
+   **Don't guess characters silently.** If an icon depends on a character the audio and
+   metadata don't make clear (a song named after a character, say), draw your best guess and
+   say which icons are guesses when you deliver the card.
 5. **Generate**:
    - **Icons** are always 16x16 pixel art, whatever the cover style — the player shows them at
      that size. Copy `art/make-ouz.mjs` as the template (grids using the palette in the
@@ -125,7 +145,8 @@ Two things it does not do, which are on you:
    - **Cover**: write a spec and run `FONTCONFIG_FILE=<art/fonts.conf> node art/styles.mjs
      render <spec.json> cover.png`. Look at `cover.png` before applying. (A hand-drawn pixel
      cover like the one in `make-ouz.mjs` is still fine for the pixel style.)
-6. **Apply**: `yoto-set-card-art` with `coverPath` and `icons: [{track, iconPath}, ...]`.
+6. **Show, then apply**: send the parent `cover.png` (and the icon sheet), and apply with
+   `yoto-set-card-art` (`coverPath`, `icons: [{track, iconPath}, ...]`) once they're happy.
 7. Tell the user to re-sync the player to see changes.
 8. Offer a printable sticker label for the new card — see "Printable labels" below.
 
@@ -155,9 +176,9 @@ node tools/yoto-brief.mjs <dir> image <url...>       # artwork you found elsewhe
   three hearts, the blue blood — and draw those.
 - **What it looks like:** the source's own artwork — podcast cover, episode art, YouTube
   thumbnail, album art inside the file — each saved as a PNG with its `palette`. Use that
-  palette for the cover so the card looks like the show the child knows, and either redraw
-  its characters in the chosen style or put the artwork itself on the cover (an `artwork`
-  layer, framed in the style).
+  palette for the cover so the card looks like the show the child knows, and put the
+  artwork itself on the cover (an `artwork` layer, framed in the style), never a drawn
+  copy of it.
 - **When there's little to go on**, search the web for the show, the book or the song
   (lyrics, the book's illustrations, the characters) and run `image` on artwork you find.
   If it's still thin, ask the parent one question: "what's this one about, for her?"
@@ -180,16 +201,38 @@ book's characters found for it. Put them on the cover as `artwork` layers and bu
 style around them. Drawn shapes add what the images miss — the octopus, the crown — taken
 from what the audio is actually about.
 
-**Offering styles — never more than three.** Pick up to three options that suit this card
-and render them side by side:
+**Original artwork always wins.** When an image is unmistakably tied to the content — the
+original character, the show's logo, the album art — put it **centred** on the cover as an
+`artwork` layer, and never replace it with a drawn approximation. The brief already trims
+plain empty margins off saved images; crop further by hand if the subject still sits in a
+sea of background. Avoid `pixel` for covers with real artwork: it renders smooth and then
+downsamples, which blurs the artwork badly. Prefer `paper`, `paper+clay` or `watercolour`.
+(Track icons stay 16x16 pixel art either way.)
+
+**Always three options, each really different.** Every new cover (and every sticker made
+from a new cover) gets exactly three designs, side by side, numbered. Never skip this, and
+never send three textures of the same picture. Three separate specs:
+
+1. **The real picture.** The image found for the content (show art, the character, the
+   album cover), centred and large, sharp, in a light frame (`paper` or `watercolour`).
+   If the picture already carries the title, you may leave the overlay title out
+   (`"title": ""`).
+2. **A drawing.** An illustration of what the audio is about: its characters, objects and
+   setting, in one playful style (e.g. `balloon` or `clay`).
+3. **A second drawing.** A clearly different style *and* a different layout: if 2 is a scene,
+   make 3 one big character, or the other way round (e.g. `crayon` or `paper+clay`).
+
+No real picture found? Option 1 becomes a third drawing in yet another style; say so.
 
 ```bash
-FONTCONFIG_FILE=<art/fonts.conf> node art/styles.mjs gallery options.png spec.json --options=balloon,paper+clay,crayon
+FONTCONFIG_FILE=<art/fonts.conf> node art/styles.mjs gallery options.png a.json b.json c.json
 ```
 
-Send the picture with the step-2 table and let the parent answer with a number. Don't list
-every style, and don't explain them unless asked. `node art/styles.mjs list` has the whole
-kit for you to choose from:
+Give each spec an `"optionLabel"` ("the show's own picture", "drawing: balloon") and it
+appears under its number. Send the picture with the step-2 table and let the parent answer
+with a number. Don't explain the styles unless asked. (`gallery <out> spec.json
+--options=a,b,c` still renders one design in three styles, but only as a quick look for you,
+not as the options for the parent.) `node art/styles.mjs list` has the whole kit:
 
 | style | look | mixes well as |
 |---|---|---|
@@ -214,9 +257,10 @@ into the picture.
 `node tools/yoto-discover.mjs <profile> stylepick <style> <card title>`. Don't set a default
 yourself. When the output has `askDefault`, ask once — "you've picked balloon for most of
 the recent cards, want me to use it by default?" — then `styledefault <style>` on a yes, or
-`styledefault declined <style>` on a no, so you don't ask about it again. With a default
-set, use it without showing options, say which style you used, and offer the options
-whenever the parent wants something different.
+`styledefault declined <style>` on a no, so you don't ask about it again. **A default never
+replaces the three options**: it only decides that one of the two drawings uses the
+favourite style, and you mention it ("2 is in balloon, your usual"). Record the pick with
+`stylepick` every time; for option 1, record the frame style.
 
 **The spec** (full format at the top of `art/styles.mjs`): title and subtitle (in the
 content's own language, `"rtl": true` for Hebrew/Arabic), `palette` from the brief's
@@ -280,7 +324,10 @@ Each run is `node tools/yoto-discover.mjs <profile> scan`, which prints JSON and
 #### Looking past iTunes
 
 `scan` covers iTunes and the feeds already tracked. That is the mechanical half — the rest
-is yours, with web search:
+is yours, with web search. Same rule as the pipeline: **audio comes from open sources** —
+RSS feeds (iTunes podcast results carry the show's real feed URL, so those are fine),
+YouTube, Archive.org and creators' own sites. An iTunes *music* result is metadata only
+(track list, durations, album art): find the audio itself in the open.
 
 - **iTunes handles Hebrew better than it looks.** Hebrew terms with `country=IL` return
   Israeli shows along with their real feed URLs (Spreaker, Omny and the like). Start there
@@ -289,7 +336,7 @@ is yours, with web search:
   shows that publish only on their own site. Also just ask the parent where they get
   podcasts — they usually know the local landscape better than any index.
 - **YouTube is a real source**, especially for songs and stories in languages that
-  podcasts underserve. `yt-dlp` takes the audio (latest version — see the pipeline). A
+  podcasts underserve. `yt-dlp` takes the audio (see "yt-dlp" below). A
   channel has a feed at
   `https://www.youtube.com/feeds/videos.xml?channel_id=<id>` which `probe` reads, so a
   channel can be watched for new uploads exactly like a podcast — but it carries no audio,
@@ -478,8 +525,39 @@ a default set, don't ask again — but do say which one you are using, so it sta
 - List / remove (renumbers) / rename a chapter: `node tools/yoto-chapters.mjs <cardId> list|remove <n>|rename <n> <title>`.
 - There's no delete-card tool in the MCP server.
 
+## yt-dlp
+
+Old builds fail with "Requested format is not available", and even a recent stable build
+can fail YouTube's JS "n challenge" (e.g. `a.addOnDisposeCallback is not a function`).
+**Use the nightly build first:**
+
+```bash
+curl -L -o yt-dlp https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp
+chmod +x yt-dlp
+./yt-dlp --js-runtimes node -x --audio-format mp3 <url>      # add --remote-components ejs:github if asked for
+```
+
+`tools/yoto-brief.mjs` runs `$YTDLP` if set (e.g. `YTDLP=./yt-dlp`), else `yt-dlp`, and passes
+`--js-runtimes node`. If every video still fails ("video not available") on the nightly
+build, stop: say so plainly and ask the parent for the audio files instead of trying
+variations in a loop.
+
+## Containers and proxies
+
+- **Yoto API through an intercepting proxy:** set
+  `NO_PROXY=login.yotoplay.com,api.yotoplay.com` for the MCP server (see README).
+- **yt-dlp TLS errors** ("self-signed certificate in certificate chain") behind a proxy such
+  as NanoClaw/OneCLI: yt-dlp trusts its bundled `certifi`, which doesn't have the proxy's CA,
+  and ignores `SSL_CERT_FILE`. Never use `--no-check-certificates`. Run it through
+  `tools/yt-dlp-proxy.py`, which points `certifi` at the proxy's CA bundle first:
+  `YTDLP_CA_BUNDLE=/tmp/onecli-combined-ca.pem YTDLP_BIN=./yt-dlp python3 tools/yt-dlp-proxy.py <args>`
+  (for the brief: `YTDLP="python3 tools/yt-dlp-proxy.py"`).
+- **Node's `fetch` behind a proxy** (the brief and discovery tools): run with
+  `NODE_USE_ENV_PROXY=1` (Node 22.21+).
+- **`art/node_modules`** must be installed inside the environment that runs the art scripts
+  (see "First run").
+
 ## Notes
 
 - Long audio (e.g. 89 min) needs a long transcode-poll timeout; the server polls up to 10 minutes.
-- If the agent runs behind an HTTPS-intercepting proxy, set `NO_PROXY=login.yotoplay.com,api.yotoplay.com` for the MCP server (see README).
 - Never commit or share `.yoto-mcp-config.json` — it holds the OAuth tokens.

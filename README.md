@@ -4,6 +4,8 @@ Create Yoto Make-Your-Own cards by chatting with an agent (Claude Code, NanoClaw
 client): it finds and uploads the audio, adds the tracks, draws a cover and a pixel icon for
 every track, and prints stickers for the physical cards.
 
+<p align="center"><img src="docs/demo.gif" alt="A one-minute tour: ask in your own words, it finds the episodes, three covers to pick from, pixel icons, stickers, child profiles and episode updates" width="320"></p>
+
 ![Playful covers and printable stickers](docs/new-features.png)
 
 ## What it does
@@ -18,16 +20,16 @@ source's own artwork: the podcast cover, episode art, YouTube thumbnail or album
 cover uses that artwork and its colours, so the card looks like the show the child already
 knows.
 
-**Lets you pick a look — from at most three playful options.** Balloon, paper cut-out, clay,
-crayon, watercolour and more, or a mix of two. Titles are always plain, readable text over the
-art. If you keep picking the same style, it asks whether to make it the default.
+**Lets you pick from three very different covers, every time:** the real picture found for the
+content, a drawing of what it's about, and a second drawing in another style and layout.
+Styles include balloon, paper cut-out, clay, crayon and watercolour, or a mix of two. Titles
+are always plain, readable text over the art. If you keep picking the same style, it asks
+whether to make it the default, which then styles one of the drawings and never skips the
+choice.
 
-![Three cover options for one card](docs/cover-options.png)
+![Three cover options for one card: the podcast's own picture, a balloon drawing, a crayon drawing](docs/cover-options.png)
 
-The same card with the source's own artwork framed in each option — Hebrew and other
-right-to-left titles work too:
-
-![Cover options built around the source artwork](docs/source-art-options.png)
+Hebrew and other right-to-left titles work too.
 
 **Keeps pixel icons for every track**, since 16x16 pixel art is all the Yoto player's screen
 can show.
@@ -50,11 +52,13 @@ own language.
 - `SKILL.md` — the workflow the agent follows (art generation is a default step of the new-card pipeline)
 - `server/` — the Yoto MCP server (Node/TypeScript)
 - `art/` — pixel-art icons: `make.mjs` (Science-Yuck card), `make-ouz.mjs` (template for a new card), Rubik font
-- `art/styles.mjs` — covers in playful styles (balloon, paper cut-out, clay, crayon, watercolour, isometric, risograph, pixel, and mixes of two) from a JSON spec, a side-by-side view of up to three options, and palettes from source artwork
+- `art/styles.mjs` — covers in playful styles (balloon, paper cut-out, clay, crayon, watercolour, isometric, risograph, pixel, and mixes of two) from a JSON spec, a side-by-side view of the three cover options, and palettes from source artwork
 - `art/labels.mjs` — A4 PDF of sticker labels for the physical cards
 - `tools/yoto-brief.mjs` — what a source's audio is about (descriptions, chapters, transcripts, captions, tags) and its own artwork, gathered before designing the cover
 - `tools/yoto-chapters.mjs` — list / remove / rename chapters on an existing card
 - `tools/yoto-discover.mjs` — per-child profiles and scheduled discovery of new content
+- `tools/yt-dlp-proxy.py` — runs yt-dlp behind an HTTPS-intercepting proxy, trusting its CA
+- `CHANGELOG.md` — what changed, newest first
 
 ## Quickest path: let an agent set it up
 
@@ -149,13 +153,22 @@ If the container goes through an HTTPS-intercepting proxy (OneCLI), the Yoto hos
 
 The refresh token is saved and renewed automatically.
 
+**If `yoto-auth-complete` fails with ENOENT**, `YOTO_CONFIG_PATH` (or the default path) points
+at a directory that isn't there, often a stale path from an older install. The server now
+creates the directory itself, and if writing still fails it keeps the sign-in in memory:
+fix the path and call `yoto-auth-complete` again, with no new code. If the sign-in itself
+failed, run `yoto-auth` for a fresh link. A code is single-use, so never retry an old one.
+
 ## 4. Art tooling
 
 ```bash
-cd art && npm install                       # sharp, pdf-lib
+cd art && npm install                       # sharp, pdf-lib - run this where the art scripts run
 # edit fonts.conf: set <dir> to the absolute path of ./fonts
 FONTCONFIG_FILE=$PWD/fonts.conf node make-ouz.mjs ./out   # writes icon-*.png, cover.png, sheet.png
 ```
+
+Install inside the environment that runs the scripts: a `node_modules` from a macOS host fails
+in a Linux container ("Cannot find module sharp-linux-x64.node").
 
 Icons must be 16x16 PNG, cover ~638x1011 portrait. Apply with the `yoto-set-card-art` tool. To make art for a new card, copy `make-ouz.mjs`, replace the `ICONS` grids (palette chars at the top of the file) and the cover SVG text/composition.
 
@@ -163,17 +176,26 @@ Icons must be 16x16 PNG, cover ~638x1011 portrait. Apply with the `yoto-set-card
 
 ```bash
 node tools/yoto-brief.mjs ./brief feed <feedUrl>      # or: youtube <url> | file <audio...> | image <url...>
-FONTCONFIG_FILE=$PWD/art/fonts.conf node art/styles.mjs gallery gallery.png spec.json
+FONTCONFIG_FILE=$PWD/art/fonts.conf node art/styles.mjs gallery options.png a.json b.json c.json
 FONTCONFIG_FILE=$PWD/art/fonts.conf node art/styles.mjs render spec.json cover.png
 ```
 
 The brief collects descriptions, chapters, transcripts/captions and tags, plus the source's
 own artwork (vetted, re-encoded to PNG) with its colour palette. The cover is designed from
 that, with the source's own images on it wherever possible, in a playful style the parent
-picks from at most three options (`gallery --options=...`, mixes like `paper+clay` allowed).
+picks from three very different options, every time: the real picture found for the content,
+a drawing, and a second drawing in a different style and layout (mixes like `paper+clay`
+allowed). A favourite style never skips the choice; it only styles one of the drawings.
 Titles are always plain readable text over the art. Track icons stay 16x16 pixel art - the
 only thing the Yoto screen shows. When the parent keeps picking the same style, the agent
-asks whether to make it the default (`stylepick` / `styledefault` in `yoto-discover.mjs`). `youtube` needs `yt-dlp`, `file` needs
+asks whether to make it the default (`stylepick` / `styledefault` in `yoto-discover.mjs`).
+
+Original artwork tied to the content (the character, the show's logo, the album art) goes
+on the cover centred, never redrawn; the brief trims plain empty margins off saved images.
+Avoid the `pixel` style for covers with real artwork, because it blurs it. `paper`,
+`paper+clay` and `watercolour` keep it sharp. The agent shows the cover before applying it.
+
+`youtube` needs `yt-dlp` (set `YTDLP` to use another build, see "yt-dlp" below), `file` needs
 `ffprobe`/`ffmpeg`; behind a proxy run Node with `NODE_USE_ENV_PROXY=1`.
 
 ## 4b. Printable labels
@@ -232,6 +254,10 @@ report what they added. It is opt-in per show, applies only to cards built from 
 files (an RSS-linked card updates itself), never covers a show the parent hasn't already
 approved, and stops to ask rather than part-filling a card that is running out of room.
 
+Audio always comes from open sources: the parent's files, RSS feeds, YouTube, Archive.org,
+creators' own sites. iTunes, Spotify and Apple Music are used for metadata only (track
+lists, durations, album art).
+
 `scan` searches iTunes and re-reads the feeds already tracked. For everything iTunes misses
 — כאן הסכתים, Podbean, Spreaker, Omny, YouTube, shows that publish only on their own site —
 the agent searches the web and runs `probe` on what it finds, which pulls any feed into the
@@ -241,6 +267,32 @@ the episodes are actually downloadable, how recently it published, and its media
 A YouTube channel's feed (`youtube.com/feeds/videos.xml?channel_id=<id>`) works with
 `probe` too, so a channel can be watched for new uploads — though it carries no audio, so
 YouTube is always delivered as downloaded files rather than a linked feed.
+
+## yt-dlp
+
+Old builds fail with "Requested format is not available", and recent stable builds can fail
+YouTube's JS challenge (`a.addOnDisposeCallback is not a function`). Use the nightly build:
+
+```bash
+curl -L -o yt-dlp https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp
+chmod +x yt-dlp
+./yt-dlp --js-runtimes node -x --audio-format mp3 <url>    # --remote-components ejs:github if needed
+```
+
+If every video still fails, the agent stops and asks for audio files rather than retrying.
+
+## Containers and proxies
+
+- Yoto API through an intercepting proxy: `NO_PROXY=login.yotoplay.com,api.yotoplay.com` on
+  the MCP server (section 2).
+- yt-dlp failing with "self-signed certificate in certificate chain" (NanoClaw/OneCLI):
+  its bundled `certifi` lacks the proxy's CA and `SSL_CERT_FILE` is ignored. Don't use
+  `--no-check-certificates`; use the wrapper, which points `certifi` at the proxy's bundle:
+  ```bash
+  YTDLP_CA_BUNDLE=/tmp/onecli-combined-ca.pem YTDLP_BIN=./yt-dlp python3 tools/yt-dlp-proxy.py <args>
+  ```
+- Node's `fetch` (brief and discovery tools): `NODE_USE_ENV_PROXY=1`.
+- Install `art/node_modules` inside the container (section 4).
 
 ## Languages
 
