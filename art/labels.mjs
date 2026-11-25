@@ -12,10 +12,11 @@
 //   --exact      exact card size, 54 x 85.6 mm (default: 52 x 83.6 mm, 1 mm inset per side)
 //   --no-guide   leave out the grey cut outline around each label
 //
-// Labels pack from the top, left to right, 3 per row. When the unused part below the last row
-// is still tall enough for another row, a dashed line is drawn across the whole sheet just
-// under it, labelled with the leftover piece's size: cut there and keep the lower piece. It
-// goes back through the printer later with --sheet=<its height>.
+// Labels pack from the top, mixing upright and sideways labels in whatever arrangement uses the
+// least height (11 fit on a whole A4 sheet). When the unused part below them is still tall
+// enough for a label, a dashed line is drawn across the whole sheet just under them, labelled
+// with the leftover piece's size: cut there and keep the lower piece. It goes back through the
+// printer later with --sheet=<its height>.
 //
 // Reads the token the MCP server saved after yoto-auth. Set YOTO_CONFIG_PATH if it's not
 // ../server/.yoto-mcp-config.json
@@ -25,9 +26,9 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 
 const MM = 72 / 25.4; // PDF points per mm
 const PAGE_W = 210, PAGE_H = 297; // A4, mm
-const COLS = 3;
 const GAP = 5; // mm between labels
 const MARGIN = 8; // mm kept clear at the top and bottom of every sheet or piece (printer margin)
+const SIDE = 5; // mm minimum clear at the left and right edges
 const DPI = 300;
 const API = "https://api.yotoplay.com";
 const USAGE = "usage: node labels.mjs list | pdf <out.pdf> <cardId|image...> [--sheet=MM] [--exact] [--no-guide]";
@@ -89,55 +90,88 @@ const roundRect = (w, h, r) =>
 async function pdf(out, items) {
   if (!out || !items.length) throw new Error(USAGE);
   const exact = !!flags.exact;
-  const W = exact ? 54 : 52, H = exact ? 85.6 : 83.6, R = exact ? 3.2 : 3; // mm
-  const rowsFit = (h) => Math.max(0, Math.floor((h - 2 * MARGIN + GAP) / (H + GAP)));
+  const W = exact ? 54 : 52, H = exact ? 85.6 : 83.6, R = exact ? 3.2 : 3; // mm, upright label
+
+  // A layout is a set of side-by-side columns, each of upright (P) or sideways (L) labels.
+  // Sideways labels pack tighter, and two upright columns plus one sideways column fit 11 on
+  // A4 against 9 upright. Layouts wider than the printable width are dropped.
+  const P = { w: W, h: H, rot: false }, L = { w: H, h: W, rot: true };
+  const widthOf = (cols) => cols.reduce((s, c) => s + c.w, 0) + GAP * (cols.length - 1);
+  const LAYOUTS = [[L, L], [P, P, L], [P, P, P]].filter((cols) => widthOf(cols) <= PAGE_W - 2 * SIDE);
+  const perCol = (c, h) => Math.max(0, Math.floor((h + GAP) / (c.h + GAP)));
+  const capOf = (cols, h) => cols.reduce((s, c) => s + perCol(c, h), 0);
+  const maxCap = (pageH) => Math.max(...LAYOUTS.map((cols) => capOf(cols, pageH - 2 * MARGIN)));
+
+  // The layout that fits n labels in the least height; a full page if n doesn't fit.
+  function plan(n, usable) {
+    let best = null;
+    for (const cols of LAYOUTS) {
+      const hs = [...new Set(cols.flatMap((c) =>
+        Array.from({ length: perCol(c, usable) }, (_, k) => (k + 1) * (c.h + GAP) - GAP)))].sort((x, y) => x - y);
+      const h = hs.find((h) => capOf(cols, h) >= n);
+      if (h !== undefined && (!best || h < best.h - 1e-9)) best = { cols, h };
+    }
+    if (best) return best;
+    const cols = LAYOUTS.reduce((a, b) => (capOf(b, usable) > capOf(a, usable) ? b : a));
+    return { cols, h: usable };
+  }
+
   const firstH = flags.sheet ? Number(flags.sheet) : PAGE_H;
   if (!(firstH > 0 && firstH <= PAGE_H)) throw new Error(`--sheet must be a height in mm, up to ${PAGE_H}`);
-  if (!rowsFit(firstH)) throw new Error(`A ${firstH} mm piece is too short for a label (needs ${Math.ceil(H + 2 * MARGIN)} mm)`);
+  if (!maxCap(firstH)) throw new Error(`A ${firstH} mm piece is too short for a label (needs ${Math.ceil(W + 2 * MARGIN)} mm)`);
 
-  const left = (PAGE_W - (COLS * W + (COLS - 1) * GAP)) / 2;
-  // slot s (0-based) -> top-left corner in mm: top row first, left to right
-  const slotXY = (s) => [left + (s % COLS) * (W + GAP), MARGIN + Math.floor(s / COLS) * (H + GAP)];
-
-  const pxW = Math.round((W / 25.4) * DPI), pxH = Math.round((H / 25.4) * DPI), pxR = Math.round((R / 25.4) * DPI);
-  const mask = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${pxW}" height="${pxH}"><path d="${roundRect(pxW, pxH, pxR)}" fill="#fff"/></svg>`);
+  const px = (mm) => Math.round((mm / 25.4) * DPI);
+  const mask = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${px(W)}" height="${px(H)}"><path d="${roundRect(px(W), px(H), px(R))}" fill="#fff"/></svg>`);
 
   const doc = await PDFDocument.create();
   doc.setTitle("Yoto card labels");
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const cache = new Map();
-  let page, pageH, cap, slot = 0;
-  const placed = [];
+  const art = [];
   for (const item of items) {
     if (!cache.has(item)) {
       const { label, buf } = await loadImage(item);
-      const png = await sharp(buf).resize(pxW, pxH, { fit: "cover" })
+      const up = await sharp(buf).resize(px(W), px(H), { fit: "cover" })
         .composite([{ input: mask, blend: "dest-in" }]).png().toBuffer();
-      cache.set(item, { label, img: await doc.embedPng(png) });
+      const side = await sharp(up).rotate(90).png().toBuffer();
+      cache.set(item, { label, up: await doc.embedPng(up), side: await doc.embedPng(side) });
     }
-    if (!page || slot === cap) {
-      pageH = page ? PAGE_H : firstH;
-      cap = rowsFit(pageH) * COLS;
-      slot = 0;
-      page = doc.addPage([PAGE_W * MM, pageH * MM]);
-    }
-    const [x, y] = slotXY(slot);
-    const { label, img } = cache.get(item);
-    page.drawImage(img, { x: x * MM, y: (pageH - y - H) * MM, width: W * MM, height: H * MM });
-    if (!flags["no-guide"]) {
-      page.drawSvgPath(roundRect(W * MM, H * MM, R * MM), {
-        x: x * MM, y: (pageH - y) * MM, borderColor: rgb(0.6, 0.6, 0.6), borderWidth: 0.35,
-      });
-    }
-    placed.push({ label, page: doc.getPageCount(), row: Math.floor(slot / COLS) + 1 });
-    slot++;
+    art.push(cache.get(item));
   }
 
-  // Cut line under the last row, if what is left below can still take a row of labels.
-  const cutY = MARGIN + Math.ceil(slot / COLS) * (H + GAP) - GAP / 2;
+  const placed = [];
+  let i = 0, page, pageH, usedH, freeSpots;
+  while (i < art.length) {
+    pageH = doc.getPageCount() ? PAGE_H : firstH;
+    page = doc.addPage([PAGE_W * MM, pageH * MM]);
+    const { cols, h } = plan(art.length - i, pageH - 2 * MARGIN);
+    let x = (PAGE_W - widthOf(cols)) / 2;
+    usedH = 0; freeSpots = 0;
+    for (const c of cols) {
+      const fits = perCol(c, h);
+      let k = 0;
+      for (; k < fits && i < art.length; k++, i++) {
+        const y = MARGIN + k * (c.h + GAP); // top edge, mm from the top of the page
+        const { label, up, side } = art[i];
+        page.drawImage(c.rot ? side : up, { x: x * MM, y: (pageH - y - c.h) * MM, width: c.w * MM, height: c.h * MM });
+        if (!flags["no-guide"]) {
+          page.drawSvgPath(roundRect(c.w * MM, c.h * MM, R * MM), {
+            x: x * MM, y: (pageH - y) * MM, borderColor: rgb(0.6, 0.6, 0.6), borderWidth: 0.35,
+          });
+        }
+        placed.push({ label, page: doc.getPageCount(), sideways: c.rot });
+      }
+      if (k) usedH = Math.max(usedH, k * (c.h + GAP) - GAP);
+      freeSpots += fits - k;
+      x += c.w + GAP;
+    }
+  }
+
+  // Cut line under the labels, if what is left below can still take a label.
+  const cutY = MARGIN + usedH + GAP / 2;
   const leftoverH = Math.floor(pageH - cutY); // round down: never claim more than is there
   let leftover = null;
-  if (rowsFit(leftoverH)) {
+  if (maxCap(leftoverH)) {
     const yPt = (pageH - cutY) * MM;
     page.drawLine({
       start: { x: 0, y: yPt }, end: { x: PAGE_W * MM, y: yPt },
@@ -148,14 +182,14 @@ async function pdf(out, items) {
       x: (PAGE_W * MM - font.widthOfTextAtSize(note, 7)) / 2, y: yPt - 9,
       size: 7, font, color: rgb(0.45, 0.45, 0.45),
     });
-    leftover = { widthMm: PAGE_W, heightMm: leftoverH, labelsFit: rowsFit(leftoverH) * COLS, nextFlag: `--sheet=${leftoverH}` };
+    leftover = { widthMm: PAGE_W, heightMm: leftoverH, labelsFit: maxCap(leftoverH), nextFlag: `--sheet=${leftoverH}` };
   }
 
   writeFileSync(out, await doc.save());
   console.log(JSON.stringify({
     pdf: out, labels: placed.length, pages: doc.getPageCount(),
-    labelSizeMm: [W, H], firstSheetMm: [PAGE_W, firstH], perFullA4: rowsFit(PAGE_H) * COLS,
-    emptySpotsInLastRow: (COLS - (slot % COLS)) % COLS,
+    labelSizeMm: [W, H], firstSheetMm: [PAGE_W, firstH], perFullA4: maxCap(PAGE_H),
+    freeSpotsAboveCut: freeSpots, // more cards would fit here without using more paper
     leftover, placed,
   }, null, 2));
 }

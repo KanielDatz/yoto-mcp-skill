@@ -288,16 +288,18 @@ ink well, survives small hands). Say this the first time labels come up.
    they can't find it, ask them to measure it. Pass it as `--sheet=<height>`. No piece: a
    whole A4 sheet, no flag.
 3. **Confirm before building:** how many labels, and whether there will be a leftover piece
-   to keep — "4 labels: two rows at the top, then you cut off a 210 x 114 mm piece that
-   takes 3 more next time." If the last row isn't full (`emptySpotsInLastRow`), say so: one
-   or two more cards would fill it at no extra cost in paper.
+   to keep — "4 labels in a strip at the top, then you cut off a 210 x 177 mm piece that
+   takes 4 more next time." If `freeSpotsAboveCut` is above 0, say so: that many more cards
+   would fit above the cut line at no extra cost in paper.
 4. **Build:** `node art/labels.mjs pdf <out.pdf> <cardId|cover.png ...> [--sheet=MM]`.
    Repeat an ID for extra copies. Labels are 52 x 83.6 mm (1 mm inside the card's
    54 x 85.6 mm edge on each side, forgiving when sticking by hand), 5 mm apart, with a grey
-   outline to cut along — 3 per row, 9 on a whole A4 sheet. They pack from the top so the
-   rest of the sheet stays in one piece. Render the page to an image and look at it before
+   outline to cut along. The script mixes upright and sideways labels in whichever
+   arrangement uses the least height — up to 11 on a whole A4 sheet — and packs them at the
+   top so the rest of the sheet stays in one piece. Which way a label lies on the paper makes
+   no difference to the card; it still goes on upright. Render the page to an image and look at it before
    handing the PDF over.
-5. **The cut line.** When the space under the last row can still take a row of labels, the
+5. **The cut line.** When the space under the labels can still take at least one label, the
    PDF has a dashed line across the full width with the leftover piece's size on it (`leftover`
    in the output). Tell the parent: **cut along the dashed line first and keep the lower
    piece — it goes back in the printer next time.** Then cut out the labels from the top
