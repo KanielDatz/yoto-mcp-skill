@@ -1,1 +1,1 @@
-{"name":"yoto-art","private":true,"type":"module","dependencies":{"sharp":"^0.32.6"}}
+{"name":"yoto-art","private":true,"type":"module","dependencies":{"pdf-lib":"^1.17.1","sharp":"^0.32.6"}}

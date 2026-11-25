@@ -1,4 +1,5 @@
 .yoto-mcp-config.json
+.yoto-labels.json
 node_modules/
 dist/
 out/

@@ -2,9 +2,14 @@
 
 Create Yoto MYO cards from an agent (Claude Code / NanoClaw / any MCP client): upload audio, add tracks, set pixel-art icons and a cover, and edit chapters.
 
+![Playful covers and printable stickers](docs/new-features.png)
+
 - `SKILL.md` — the workflow the agent follows (art generation is a default step of the new-card pipeline)
 - `server/` — the Yoto MCP server (Node/TypeScript)
 - `art/` — pixel-art generator: `make.mjs` (Science-Yuck card), `make-ouz.mjs` (template for a new card), Rubik font
+- `art/styles.mjs` — covers in playful styles (balloon, paper cut-out, clay, crayon, watercolour, isometric, risograph, pixel, and mixes of two) from a JSON spec, a side-by-side view of up to three options, and palettes from source artwork
+- `art/labels.mjs` — A4 PDF of sticker labels for the physical cards
+- `tools/yoto-brief.mjs` — what a source's audio is about (descriptions, chapters, transcripts, captions, tags) and its own artwork, gathered before designing the cover
 - `tools/yoto-chapters.mjs` — list / remove / rename chapters on an existing card
 - `tools/yoto-discover.mjs` — per-child profiles and scheduled discovery of new content
 
@@ -38,7 +43,7 @@ someone else's. Registering takes a minute and is free.
 ## Credits
 
 The server is based on [bperkinspdx/yoto-mcp-server](https://github.com/bperkinspdx/yoto-mcp-server)
-(declared MIT in its `package.json`; the upstream repo ships no LICENSE file), with changes:
+with changes:
 PKCE + paste-the-code auth, correct add-track endpoint (`POST /content`), longer transcode
 polling, `yoto-set-card-art`, and a configurable token path. MIT licensed — see `LICENSE`.
 
@@ -104,12 +109,49 @@ The refresh token is saved and renewed automatically.
 ## 4. Art tooling
 
 ```bash
-cd art && npm install                       # sharp
+cd art && npm install                       # sharp, pdf-lib
 # edit fonts.conf: set <dir> to the absolute path of ./fonts
 FONTCONFIG_FILE=$PWD/fonts.conf node make-ouz.mjs ./out   # writes icon-*.png, cover.png, sheet.png
 ```
 
 Icons must be 16x16 PNG, cover ~638x1011 portrait. Apply with the `yoto-set-card-art` tool. To make art for a new card, copy `make-ouz.mjs`, replace the `ICONS` grids (palette chars at the top of the file) and the cover SVG text/composition.
+
+## 4a. Content brief and cover styles
+
+```bash
+node tools/yoto-brief.mjs ./brief feed <feedUrl>      # or: youtube <url> | file <audio...> | image <url...>
+FONTCONFIG_FILE=$PWD/art/fonts.conf node art/styles.mjs gallery gallery.png spec.json
+FONTCONFIG_FILE=$PWD/art/fonts.conf node art/styles.mjs render spec.json cover.png
+```
+
+The brief collects descriptions, chapters, transcripts/captions and tags, plus the source's
+own artwork (vetted, re-encoded to PNG) with its colour palette. The cover is designed from
+that, with the source's own images on it wherever possible, in a playful style the parent
+picks from at most three options (`gallery --options=...`, mixes like `paper+clay` allowed).
+Titles are always plain readable text over the art. Track icons stay 16x16 pixel art - the
+only thing the Yoto screen shows. When the parent keeps picking the same style, the agent
+asks whether to make it the default (`stylepick` / `styledefault` in `yoto-discover.mjs`). `youtube` needs `yt-dlp`, `file` needs
+`ffprobe`/`ffmpeg`; behind a proxy run Node with `NODE_USE_ENV_PROXY=1`.
+
+## 4b. Printable labels
+
+```bash
+node art/labels.mjs list                                   # your cards, and which have a cover
+node art/labels.mjs pdf labels.pdf <cardId> <cardId> ...   # whole A4 sheet, up to 11 labels
+node art/labels.mjs pdf labels.pdf <cardId> --piece=2      # print on leftover piece #2
+node art/labels.mjs pieces                                 # leftover pieces on record
+```
+
+Print on A4 PVC sticker paper (matte recommended) at **100% / Actual size**. Labels are the
+card's cover art, 52 x 83.6 mm with rounded corners (`--exact` for the full 54 x 85.6 mm card
+size), 5 mm apart, with a thin cut outline (`--no-guide` to drop it). Upright and sideways
+labels are mixed to use the least height (11 per A4 sheet), packed at the top, and when the
+rest of the sheet can still take a label, a dashed line marks where to cut it off,
+and the piece below it is marked with its number and size ("#2  210 x 114 mm") and arrows
+pointing at the end to feed into the printer first. Keep it and print on it next time with
+`--piece=<id>` (or `--sheet=<height>` for a piece cut by hand), setting a custom paper size of
+the same dimensions in the print dialog. Pieces are recorded in `.yoto-labels.json` next to
+the token file; `pieces add <mm>` / `pieces drop <id>` correct the record.
 
 ## 5. Chapter tools
 
@@ -183,9 +225,3 @@ results".
 Profiles describe a child, so keep them out of git — `.gitignore` already covers
 `profiles/` and `*.profile.json`. Put them wherever `.yoto-mcp-config.json` lives, so they
 survive restarts.
-
-**Sources.** The parent decides what goes on their family's card; the skill builds it.
-Files they have, CDs, bought MP3s, podcast feeds, open-licensed material and `yt-dlp` audio
-for their own child are all just normal input. The skill is told not to lecture, not to
-raise the subject twice, and never to answer with a refusal and no way forward. The one
-thing it won't help with is distributing a card beyond the family.
