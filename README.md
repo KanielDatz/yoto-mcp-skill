@@ -2,10 +2,12 @@
 
 Create Yoto MYO cards from an agent (Claude Code / NanoClaw / any MCP client): upload audio, add tracks, set pixel-art icons and a cover, and edit chapters.
 
+![Playful covers and printable stickers](docs/new-features.png)
+
 - `SKILL.md` — the workflow the agent follows (art generation is a default step of the new-card pipeline)
 - `server/` — the Yoto MCP server (Node/TypeScript)
 - `art/` — pixel-art generator: `make.mjs` (Science-Yuck card), `make-ouz.mjs` (template for a new card), Rubik font
-- `art/styles.mjs` — covers in eight styles (pixel, balloon, isometric, risograph, watercolour, paper cut-out, crayon, clay) from a JSON spec, a side-by-side style gallery, and palettes from source artwork
+- `art/styles.mjs` — covers in playful styles (balloon, paper cut-out, clay, crayon, watercolour, isometric, risograph, pixel, and mixes of two) from a JSON spec, a side-by-side view of up to three options, and palettes from source artwork
 - `art/labels.mjs` — A4 PDF of sticker labels for the physical cards
 - `tools/yoto-brief.mjs` — what a source's audio is about (descriptions, chapters, transcripts, captions, tags) and its own artwork, gathered before designing the cover
 - `tools/yoto-chapters.mjs` — list / remove / rename chapters on an existing card
@@ -123,9 +125,12 @@ FONTCONFIG_FILE=$PWD/art/fonts.conf node art/styles.mjs render spec.json cover.p
 ```
 
 The brief collects descriptions, chapters, transcripts/captions and tags, plus the source's
-own artwork (vetted, re-encoded to PNG) with its colour palette. The cover is then designed
-from that in one of eight styles; `gallery` renders the same cover in all of them so the
-parent can choose. Track icons stay 16x16 pixel art. `youtube` needs `yt-dlp`, `file` needs
+own artwork (vetted, re-encoded to PNG) with its colour palette. The cover is designed from
+that, with the source's own images on it wherever possible, in a playful style the parent
+picks from at most three options (`gallery --options=...`, mixes like `paper+clay` allowed).
+Titles are always plain readable text over the art. Track icons stay 16x16 pixel art - the
+only thing the Yoto screen shows. When the parent keeps picking the same style, the agent
+asks whether to make it the default (`stylepick` / `styledefault` in `yoto-discover.mjs`). `youtube` needs `yt-dlp`, `file` needs
 `ffprobe`/`ffmpeg`; behind a proxy run Node with `NODE_USE_ENV_PROXY=1`.
 
 ## 4b. Printable labels

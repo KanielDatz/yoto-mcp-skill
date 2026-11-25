@@ -112,7 +112,8 @@ Two things it does not do, which are on you:
 2. **Show a table and wait for approval before touching Yoto**: track #, title, duration, source. If unsure whether content is one long recording or separate songs, ask. One song per track is the usual wish.
 3. **Create the card**: `yoto-upload-audio` with track 1 (title = card title), then `yoto-add-track` for each remaining track *sequentially, in order*. Fix track 1's title afterwards: `node tools/yoto-chapters.mjs <cardId> rename 1 "<title>"`.
 4. **Art — carry straight on; this needs no second approval.** Approving the card covers its
-   art, including its style (see "Cover styles" below; it goes in the step-2 table). First get
+   art, including its style (up to three options, shown with the step-2 table — see "Cover
+   styles"). First get
    the **content brief** for the source: `node tools/yoto-brief.mjs <workDir>/brief feed|youtube|file|image ...`
    (see "Know the content first"). Design from what the audio is actually about and what the
    source itself looks like, not from the title: one icon per track plus a cover.
@@ -167,38 +168,68 @@ image that fails comes back as `skipped` with the reason — carry on without it
 
 ## Cover styles
 
-The cover is also the printed sticker, so the style is what the child sees on the card.
-`node art/styles.mjs list` describes them:
+Styles are for the **cover** only — the picture in the app, which is also the printed
+sticker. **Track icons are always 16x16 pixel art**: that is all the Yoto screen can show.
 
-| style | look |
-|---|---|
-| `pixel` | chunky pixels, small palette, old video game |
-| `balloon` | glossy twisted-balloon shapes and puffy letters |
-| `isometric` | little 3D blocks, extruded with three shades |
-| `risograph` | 2–3 bright inks, halftone dots, off-register, warm paper |
-| `watercolour` | soft bleeding washes, loose ink outline, textured paper |
-| `paper` | layered paper cut-outs with white edges and shadows |
-| `crayon` | wobbly thick lines and waxy colouring, like a child's drawing |
-| `clay` | rounded plasticine shapes with soft 3D light |
+These are cards for children: keep every cover playful — bright, friendly, a bit silly
+where the content allows. Never dark or moody.
 
-**Choosing.** If the child's profile has a `style`, use it and say which. If not, the first
-time art comes up render the gallery — `node art/styles.mjs gallery <out.png> <spec.json>`
-draws *this card's* cover in every style, side by side — send it with the step-2 table and
-let the parent pick a number. Offer to save the pick as the profile's `style`. A different
-style for one card is always fine; just ask for it.
+**The best cover shows the content itself.** Images from the source come first: the show's
+own artwork, an episode image, a chapter image, the album art, an illustration of the
+book's characters found for it. Put them on the cover as `artwork` layers and build the
+style around them. Drawn shapes add what the images miss — the octopus, the crown — taken
+from what the audio is actually about.
+
+**Offering styles — never more than three.** Pick up to three options that suit this card
+and render them side by side:
+
+```bash
+FONTCONFIG_FILE=<art/fonts.conf> node art/styles.mjs gallery options.png spec.json --options=balloon,paper+clay,crayon
+```
+
+Send the picture with the step-2 table and let the parent answer with a number. Don't list
+every style, and don't explain them unless asked. `node art/styles.mjs list` has the whole
+kit for you to choose from:
+
+| style | look | mixes well as |
+|---|---|---|
+| `balloon` | glossy twisted-balloon shapes | shapes |
+| `paper` | paper cut-outs, white edges, shadows | background |
+| `clay` | soft plasticine shapes with 3D light | shapes |
+| `crayon` | wobbly lines, waxy colouring, a child's drawing | either |
+| `watercolour` | soft bleeding washes on paper | background |
+| `isometric` | little extruded 3D blocks | shapes |
+| `risograph` | bright inks, halftone dots, off-register | either |
+| `pixel` | chunky pixels, like the icons | either |
+
+**Mixing** is often the most fun option: `"style": "paper+clay"` takes the background,
+texture and frames from `paper` and draws every shape in `clay`. A single layer can also
+set its own `"style"`. Count a mix as one option.
+
+**Titles are never art.** Whatever the style, the title and subtitle go on top as plain,
+bold, outlined text, so a child can read them. `styles.mjs` does this; don't draw lettering
+into the picture.
+
+**Remembering what they like.** After the parent picks, record it:
+`node tools/yoto-discover.mjs <profile> stylepick <style> <card title>`. Don't set a default
+yourself. When the output has `askDefault`, ask once — "you've picked balloon for most of
+the recent cards, want me to use it by default?" — then `styledefault <style>` on a yes, or
+`styledefault declined <style>` on a no, so you don't ask about it again. With a default
+set, use it without showing options, say which style you used, and offer the options
+whenever the parent wants something different.
 
 **The spec** (full format at the top of `art/styles.mjs`): title and subtitle (in the
 content's own language, `"rtl": true` for Hebrew/Arabic), `palette` from the brief's
-artwork, and `layers` drawn in order — `motif` (sun, moon, star, cloud, heart, tree, house,
-fish, flower, crown, hill, balloon, car, note, book), `path` (any SVG path, for whatever the
-content needs that isn't a motif — draw it), and `artwork` (an image from the brief, `"shape":
-"circle"` or rounded). Coordinates are a 160 x 253 box. Keep the middle of the card for the
-main subject and leave the title room at the top; the label is cut with rounded corners and
-about 1 mm comes off each edge, so nothing important within 4 units of the border.
+artwork, and `layers` drawn in order — `artwork` (an image from the brief, `"shape":
+"circle"` or rounded), `motif` (sun, moon, star, cloud, heart, tree, house, fish, flower,
+crown, hill, balloon, car, note, book) and `path` (any SVG path, for whatever the content
+needs that isn't a motif — draw it). Coordinates are a 160 x 253 box. Keep the main subject
+in the middle and the top free for the title; the sticker loses about 1 mm per edge and has
+rounded corners, so keep anything important 4 units in from the border.
 
-**Changing an existing card's look** (e.g. for stickers): make a new cover in the chosen
-style from a fresh brief, then ask whether it should also replace the cover in the app or be
-used for the sticker only (`labels.mjs pdf` takes the `cover.png` path directly).
+**Changing an existing card's look** (e.g. for stickers): make a new cover from a fresh
+brief, then ask whether it should also replace the cover in the app or be used for the
+sticker only (`labels.mjs pdf` takes the `cover.png` path directly).
 
 ## Proactive discovery by child profile
 
@@ -222,7 +253,8 @@ Never commit these files — they describe a child.
   Hebrew, a Hebrew-speaking child gets English results only.
 - `country` — iTunes storefront, e.g. `IL`
 - optional: `preferredLengthMinutes`, `avoid` (unwanted content), `notes`, `delivery`,
-  `style` (their cover style — see "Cover styles")
+  `style` (default cover style, only once the parent has agreed — see "Cover styles");
+  `styleChoices` is filled in by `stylepick`
   (the RSS-or-files default — see below)
 
 If there is no profile, offer to build one and ask for all of it **in one short

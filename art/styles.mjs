@@ -2,14 +2,15 @@
 //
 //   node styles.mjs list                              style names + one-line descriptions
 //   node styles.mjs render <spec.json> <out.png>      one cover, 638x1011
-//   node styles.mjs gallery <out.png> [spec.json]     the same cover in every style, side by side
+//   node styles.mjs gallery <out.png> [spec.json] [--options=balloon,paper+clay,crayon]
+//                                                     the same cover in up to 3 style options
 //   node styles.mjs palette <image>                   dominant colours of an image (source artwork)
 //
 // Run with FONTCONFIG_FILE=<art/fonts.conf> so the Rubik font is found.
 //
 // Spec (coordinates are in a 160 x 253 box, like the pixel covers; colours are hex):
 // {
-//   "style": "risograph",
+//   "style": "paper+clay",            // one style, or base+shapes to mix two
 //   "title": "עוץ לי גוץ לי", "subtitle": "Rumpelstiltskin", "rtl": true,
 //   "palette": ["#e23c3c", "#f5c542", "#3a7bd5", "#2e2a4f"],   // from `palette` on the source art
 //   "background": "#2e2a4f",                                    // optional; default per style
@@ -22,7 +23,8 @@
 // }
 // A motif layer is drawn centred on x,y at `size` across; a path layer as given. Later layers
 // are drawn on top. `artwork` puts a real image from the source on the cover, framed in the
-// style. Motifs: see MOTIFS below - anything else is drawn as a path.
+// style. Motifs: see MOTIFS below - anything else is drawn as a path. Any layer can set its
+// own "style". The title and subtitle are always plain, readable text over the art.
 import sharp from "sharp";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { extname } from "path";
@@ -83,9 +85,9 @@ export const MOTIFS = {
 };
 
 // ---------- styles ----------
-// Each style: describe (for the parent), bg (default background), defs, part (one filled
-// path), text (title lettering), frame (source artwork), overlay (texture over everything),
-// and optional post (a sharp pass on the finished image).
+// Each style: describe, bg (default background), defs, part (one filled path), frame (source
+// artwork), overlay (texture over the scene) and optional grid (pixelation). Titles are NOT
+// styled: they are one clean, readable overlay on top of every style (see titleSvg).
 let uid = 0;
 const id = (p) => `${p}${++uid}`;
 
@@ -104,17 +106,34 @@ const fontFamily = 'font-family="Rubik ExtraBold, Rubik" font-weight="800"';
 const textEl = (t, x, y, size, attrs, rtl) =>
   `<text x="${x}" y="${y}" font-size="${size}" ${fontFamily} text-anchor="middle" direction="${rtl ? "rtl" : "ltr"}" ${attrs}>${esc(t)}</text>`;
 
+// Titles: plain bold letters with a thick contrasting outline and a soft shadow, the same in
+// every style. Art makes lettering hard to read, so the title is never part of the art.
+function titleSvg(spec, P, bg) {
+  const rtl = !!spec.rtl;
+  const fill = spec.titleColor || (luma(bg) < 120 ? "#ffffff" : P.find((p) => luma(p) < 110) || "#2b2340");
+  const outline = luma(fill) > 140 ? "#1f1a2e" : "#ffffff";
+  const size = spec.titleSize || Math.min(24, 150 / Math.max(4, [...(spec.title || "")].length * 0.62));
+  const line = (t, y, s, f, o, r) =>
+    textEl(t, 80, y + s * 0.06, s, `fill="#000" opacity=".25"`, r) +
+    textEl(t, 80, y, s, `fill="${f}" stroke="${o}" stroke-width="${(s / 5.5).toFixed(2)}" stroke-linejoin="round" paint-order="stroke"`, r);
+  const lines = String(spec.title || "").split("\n");
+  let svg = lines.map((t, i) => line(t, (spec.titleY ?? 36) + i * size * 1.05, size, fill, outline, rtl)).join("");
+  if (spec.subtitle) {
+    const s = spec.subtitleSize || 11;
+    svg += line(spec.subtitle, spec.subtitleY ?? 240, s, spec.subtitleColor || fill, outline, !!spec.subtitleRtl);
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${OUT_W}" height="${OUT_H}" viewBox="0 0 ${VW} ${VH}">${svg}</svg>`;
+}
+
 const STYLES = {
   pixel: {
     describe: "Chunky pixels and a small palette, like an old video game.",
     bg: (P) => darker(P[3] || P[0], 0.55),
     part: (d, c) => `<path d="${d}" fill="${c}"/>`,
-    text: (t, x, y, s, c, rtl) => textEl(t, x + 1.2, y + 1.2, s, `fill="#000"`, rtl) + textEl(t, x, y, s, `fill="${c}"`, rtl),
     frame: (img, box) => img(box) + edge(box, 0, `fill="none" stroke="#000" stroke-width="3"`),
     overlay: () => "",
     // Render smooth, then drop to an 80-pixel-wide grid and blow it back up without smoothing.
-    // Text goes on a finer grid than the scene so small lettering stays readable.
-    grid: { scene: 80, text: 160 },
+    grid: 80, // the scene is pixelated to an 80-pixel-wide grid; titles stay crisp on top
   },
 
   balloon: {
@@ -129,10 +148,6 @@ const STYLES = {
     part: (d, c, reg) => {
       const g = reg(`<radialGradient id="@" cx="32%" cy="28%" r="80%"><stop offset="0" stop-color="#fff" stop-opacity=".95"/><stop offset=".18" stop-color="${lighter(c, 0.25)}"/><stop offset=".65" stop-color="${c}"/><stop offset="1" stop-color="${darker(c, 0.4)}"/></radialGradient>`);
       return `<path d="${d}" fill="url(#${g})" stroke="${darker(c, 0.45)}" stroke-width=".6" filter="url(#bsh)"/>`;
-    },
-    text: (t, x, y, s, c, rtl, reg) => {
-      const g = reg(`<linearGradient id="@" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${lighter(c, 0.6)}"/><stop offset=".5" stop-color="${c}"/><stop offset="1" stop-color="${darker(c, 0.35)}"/></linearGradient>`);
-      return textEl(t, x, y, s, `fill="url(#${g})" stroke="${darker(c, 0.5)}" stroke-width="${s / 9}" stroke-linejoin="round" paint-order="stroke" filter="url(#bsh)"`, rtl);
     },
     frame: (img, box, c) => `<g filter="url(#bsh)">${img(box)}${edge(box, 0, `fill="none" stroke="${c}" stroke-width="5"`)}${edge(box, 0, `fill="none" stroke="#fff" stroke-opacity=".6" stroke-width="1.5" stroke-dasharray="6 14"`)}</g>`,
     overlay: () => "",
@@ -151,11 +166,6 @@ const STYLES = {
       for (let i = steps; i > 0; i--) s += `<path d="${d}" transform="translate(${(i * 0.6).toFixed(2)} ${(i * 0.42).toFixed(2)})" fill="${side}" stroke="${side}" stroke-width=".6"/>`;
       return s + `<path d="${d}" transform="translate(.5 .35)" fill="${darker(c, 0.2)}"/><path d="${d}" fill="${c}" stroke="${lighter(c, 0.45)}" stroke-width=".7" stroke-linejoin="round"/>`;
     },
-    text: (t, x, y, s, c, rtl) => {
-      let out = "";
-      for (let i = 10; i > 0; i--) out += textEl(t, x + i * 0.4, y + i * 0.28, s, `fill="${darker(c, 0.45)}"`, rtl);
-      return out + textEl(t, x, y, s, `fill="${c}"`, rtl);
-    },
     frame: (img, box, c) => {
       let s = "";
       for (let i = 14; i > 0; i--) s += edge(box, 0, `fill="${darker(c, 0.42)}"`, i * 0.6, i * 0.42);
@@ -172,10 +182,6 @@ const STYLES = {
       if (c === RISO_PAPER) return `<path d="${d}" fill="${c}" stroke="#3d5588" stroke-width=".9" style="mix-blend-mode:multiply"/>`;
       const p = reg(`<pattern id="@" width="3.2" height="3.2" patternUnits="userSpaceOnUse" patternTransform="rotate(22)"><circle cx="1.6" cy="1.6" r="1.15" fill="${c}"/></pattern>`);
       return `<g style="mix-blend-mode:multiply"><path d="${d}" fill="url(#${p})" transform="translate(1.6 1.1)"/><path d="${d}" fill="${c}" opacity=".82"/></g>`;
-    },
-    text: (t, x, y, s, c, rtl, reg, P) => {
-      const second = P.find((p) => p !== c && luma(p) < 200) || "#0078bf";
-      return `<g style="mix-blend-mode:multiply">${textEl(t, x + 1.4, y + 1, s, `fill="${second}" opacity=".85"`, rtl)}${textEl(t, x, y, s, `fill="${c}" opacity=".9"`, rtl)}</g>`;
     },
     frame: (img, box, c) => `<g style="mix-blend-mode:multiply">${edge(box, 0, `fill="${c}" opacity=".85"`, 2.2, 1.6)}${img(box, `filter="url(#duo)"`)}</g>`,
     defs: (P) => {
@@ -194,7 +200,6 @@ const STYLES = {
 <filter id="wc2" x="-20%" y="-20%" width="140%" height="140%"><feTurbulence type="fractalNoise" baseFrequency=".05" numOctaves="2" seed="9"/><feDisplacementMap in="SourceGraphic" scale="6"/></filter>
 <filter id="ink" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency=".09" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.2"/></filter>`,
     part: (d, c) => `<path d="${d}" fill="${c}" opacity=".5" filter="url(#wc)"/><path d="${d}" fill="${c}" opacity=".38" filter="url(#wc2)" transform="translate(-.8 .6)"/><path d="${d}" fill="none" stroke="${darker(c, 0.6)}" stroke-width=".7" filter="url(#ink)"/>`,
-    text: (t, x, y, s, c, rtl) => textEl(t, x, y, s, `fill="${c}" opacity=".85" filter="url(#wc2)"`, rtl) + textEl(t, x, y, s, `fill="none" stroke="${darker(c, 0.55)}" stroke-width=".5" filter="url(#ink)"`, rtl),
     frame: (img, box, c) => edge(box, 3, `fill="${c}" opacity=".45" filter="url(#wc)"`) + img(box, `opacity=".92"`),
     overlay: () => grain(0.08, 0.7),
   },
@@ -204,7 +209,6 @@ const STYLES = {
     bg: (P) => P[3] || darker(P[0], 0.3),
     defs: () => `<filter id="pc" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.6"/><feOffset dx="1.2" dy="2"/><feComponentTransfer><feFuncA type="linear" slope=".45"/></feComponentTransfer><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>`,
     part: (d, c) => `<g filter="url(#pc)"><path d="${d}" fill="#fff" stroke="#fff" stroke-width="3.2" stroke-linejoin="round"/><path d="${d}" fill="${c}"/></g>`,
-    text: (t, x, y, s, c, rtl) => `<g filter="url(#pc)">${textEl(t, x, y, s, `fill="${c}" stroke="#fff" stroke-width="${s / 6}" stroke-linejoin="round" paint-order="stroke"`, rtl)}</g>`,
     frame: (img, box) => `<g filter="url(#pc)" transform="rotate(-3 ${box.x + box.w / 2} ${box.y + box.h / 2})">${edge(box, 4, `fill="#fff"`)}${img(box)}</g>`,
     overlay: () => grain(0.07, 0.6),
   },
@@ -213,9 +217,8 @@ const STYLES = {
     describe: "Wobbly thick outlines and waxy crayon colouring, like a child's own drawing.",
     bg: () => "#fffdf6",
     defs: () => `<filter id="wob" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="turbulence" baseFrequency=".06" numOctaves="2" seed="5"/><feDisplacementMap in="SourceGraphic" scale="2.6"/></filter>
-<filter id="wax" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="1.4 .25" numOctaves="2" seed="2" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -2.2 1.6" result="m"/><feComposite in="SourceGraphic" in2="m" operator="in" result="c"/><feDisplacementMap in="c" in2="n" scale="2"/></filter>`,
+<filter id="wax" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="1.4 .25" numOctaves="2" seed="2" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.3 1.55" result="m"/><feComposite in="SourceGraphic" in2="m" operator="in" result="c"/><feDisplacementMap in="c" in2="n" scale="2"/></filter>`,
     part: (d, c) => `<path d="${d}" fill="${c}" filter="url(#wax)"/><path d="${d}" fill="none" stroke="${darker(c, 0.55)}" stroke-width="1.6" stroke-linejoin="round" filter="url(#wob)"/>`,
-    text: (t, x, y, s, c, rtl) => textEl(t, x, y, s, `fill="${c}" filter="url(#wax)"`, rtl) + textEl(t, x, y, s, `fill="none" stroke="${darker(c, 0.55)}" stroke-width=".9" filter="url(#wob)"`, rtl),
     frame: (img, box, c) => img(box) + edge(box, 0, `fill="none" stroke="${c}" stroke-width="2.4" filter="url(#wob)"`),
     overlay: () => grain(0.06, 0.9),
   },
@@ -226,7 +229,6 @@ const STYLES = {
     defs: () => `<filter id="clay" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur in="SourceAlpha" stdDeviation="2.4" result="b"/><feSpecularLighting in="b" surfaceScale="4" specularConstant=".55" specularExponent="14" lighting-color="#fff" result="s"><fePointLight x="-40" y="-60" z="120"/></feSpecularLighting><feComposite in="s" in2="SourceAlpha" operator="in" result="s2"/><feGaussianBlur in="SourceAlpha" stdDeviation="1.8" result="sh0"/><feOffset in="sh0" dx="1.5" dy="2.5" result="sh"/><feComponentTransfer in="sh" result="sh2"><feFuncA type="linear" slope=".35"/></feComponentTransfer><feMerge><feMergeNode in="sh2"/><feMergeNode in="SourceGraphic"/><feMergeNode in="s2"/></feMerge></filter>
 <filter id="clayT" x="-10%" y="-20%" width="120%" height="140%"><feGaussianBlur in="SourceAlpha" stdDeviation=".7" result="b"/><feSpecularLighting in="b" surfaceScale="2.5" specularConstant=".6" specularExponent="16" lighting-color="#fff" result="s"><fePointLight x="-40" y="-60" z="120"/></feSpecularLighting><feComposite in="s" in2="SourceAlpha" operator="in" result="s2"/><feOffset in="SourceAlpha" dx="1" dy="1.6" result="sh"/><feComponentTransfer in="sh" result="sh2"><feFuncA type="linear" slope=".3"/></feComponentTransfer><feMerge><feMergeNode in="sh2"/><feMergeNode in="SourceGraphic"/><feMergeNode in="s2"/></feMerge></filter>`,
     part: (d, c) => `<path d="${d}" fill="${c}" stroke="${c}" stroke-width="2" stroke-linejoin="round" filter="url(#clay)"/>`,
-    text: (t, x, y, s, c, rtl) => textEl(t, x, y, s, `fill="${c}" stroke="${c}" stroke-width="${s / 10}" stroke-linejoin="round" filter="url(#clayT)"`, rtl),
     frame: (img, box, c) => edge(box, 4, `fill="${c}" filter="url(#clay)"`) + img(box),
     overlay: () => "",
   },
@@ -242,19 +244,33 @@ function imageHref(path) {
   return `data:image/${type};base64,${buf.toString("base64")}`;
 }
 
-function buildSvg(spec, only = "all") {
-  const st = STYLES[spec.style];
-  if (!st) throw new Error(`unknown style "${spec.style}" - one of: ${STYLE_NAMES.join(", ")}`);
+// A style option is one name ("paper") or a mix ("paper+clay": the first gives the
+// background, texture and frames, the second draws the shapes). Single layers can also set
+// their own "style".
+function parseStyle(name) {
+  const [base, shapes] = String(name || "").split("+");
+  for (const n of [base, shapes].filter(Boolean))
+    if (!STYLES[n]) throw new Error(`unknown style "${n}" - one of: ${STYLE_NAMES.join(", ")}`);
+  return { base, shapes: shapes || base };
+}
+
+function buildSvg(spec) {
+  const { base, shapes } = parseStyle(spec.style);
+  const st = STYLES[base];
   let P = spec.palette?.length ? [...spec.palette] : ["#e5484d", "#f5c542", "#3a7bd5", "#2e2a4f"];
   if (st.ink) P = P.map(toInk);
   const col = (c) => (st.ink ? toInk(c) : c);
   const bg = spec.background ? col(spec.background) : st.bg(P);
+  spec._P = P; spec._bg = bg;
 
   const extraDefs = [];
   const reg = (tpl) => { const i = id("r"); extraDefs.push(tpl.replace("@", i)); return i; };
 
+  const used = new Set([base, shapes, ...(spec.layers || []).map((l) => l.style).filter(Boolean)]);
+  for (const n of used) if (!STYLES[n]) throw new Error(`unknown style "${n}"`);
   const body = [];
   for (const L of spec.layers || []) {
+    const ls = STYLES[L.style || (L.artwork ? base : shapes)];
     if (L.artwork) {
       if (!existsSync(L.artwork)) throw new Error(`artwork not found: ${L.artwork}`);
       const box = { x: L.x, y: L.y, w: L.w, h: L.h, round: L.shape === "circle", r: L.r ?? 6 };
@@ -263,7 +279,7 @@ function buildSvg(spec, only = "all") {
         : `<clipPath id="@"><rect x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" rx="${box.r}"/></clipPath>`);
       const href = imageHref(L.artwork);
       const img = (b, extra = "") => `<image href="${href}" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clip})" ${extra}/>`;
-      body.push(st.frame(img, box, col(L.color || P[0])));
+      body.push(ls.frame(img, box, col(L.color || P[0])));
       continue;
     }
     const c = col(L.color || P[0]);
@@ -275,41 +291,34 @@ function buildSvg(spec, only = "all") {
       const flip = L.flip ? ` scale(-1 1) translate(-100 0)` : "";
       const rot = L.rotate ? ` rotate(${L.rotate} 50 50)` : "";
       body.push(`<g transform="translate(${L.x - (L.size || 40) / 2} ${L.y - (L.size || 40) / 2}) scale(${s})${flip}${rot}">` +
-        parts.map(([d, t]) => (t === "string" ? `<path d="${d}" fill="none" stroke="${darker(c, 0.5)}" stroke-width="1.5"/>` : st.part(d, tone(t), reg))).join("") + `</g>`);
+        parts.map(([d, t]) => (t === "string" ? `<path d="${d}" fill="none" stroke="${darker(c, 0.5)}" stroke-width="1.5"/>` : ls.part(d, tone(t), reg))).join("") + `</g>`);
     } else if (L.path) {
-      body.push(st.part(L.path, c, reg));
+      body.push(ls.part(L.path, c, reg));
     }
   }
 
-  const rtl = !!spec.rtl;
-  const tColor = col(spec.titleColor || (luma(bg) < 110 ? "#ffffff" : P.find((p) => luma(p) < 150) || "#2e2a4f"));
-  const sColor = col(spec.subtitleColor || tColor);
-  const tSize = spec.titleSize || Math.min(26, 150 / Math.max(4, [...(spec.title || "")].length * 0.62));
-  const titleLines = String(spec.title || "").split("\n");
-  const titles = titleLines.map((line, i) => st.text(line, VW / 2, (spec.titleY ?? 40) + i * tSize * 1.05, tSize, tColor, rtl, reg, P)).join("");
-  const sub = spec.subtitle ? st.text(spec.subtitle, VW / 2, spec.subtitleY ?? 240, spec.subtitleSize || 11, sColor, !!spec.subtitleRtl, reg, P) : "";
-
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${OUT_W}" height="${OUT_H}" viewBox="0 0 ${VW} ${VH}">
-<defs>${st.defs ? st.defs(P, bg) : ""}${extraDefs.join("")}</defs>
-${only === "text" ? "" : `<rect width="${VW}" height="${VH}" fill="${bg}"/>
+<defs>${[...used].map((n) => (STYLES[n].defs ? STYLES[n].defs(P, bg) : "")).join("")}${extraDefs.join("")}</defs>
+<rect width="${VW}" height="${VH}" fill="${bg}"/>
 ${st.backdrop ? st.backdrop(P) : ""}
-${body.join("\n")}`}
-${only === "scene" ? "" : titles + sub}
-${only === "text" ? "" : st.overlay()}
+${body.join("\n")}
+${st.overlay()}
 </svg>`;
 }
 
 export async function render(spec) {
-  const grid = STYLES[spec.style]?.grid;
-  if (!grid) return sharp(Buffer.from(buildSvg(spec))).resize(OUT_W, OUT_H).png().toBuffer();
-  // Pixel style: render smooth, drop to a coarse grid, blow back up without smoothing.
-  const pixelate = async (svg, w) => {
-    const small = await sharp(Buffer.from(svg)).resize(w, Math.round((w * OUT_H) / OUT_W), { kernel: "nearest" }).png().toBuffer();
-    return sharp(small).resize(OUT_W, OUT_H, { kernel: "nearest" }).png().toBuffer();
-  };
-  const scene = await pixelate(buildSvg(spec, "scene"), grid.scene);
-  const text = await pixelate(buildSvg(spec, "text"), grid.text);
-  return sharp(scene).composite([{ input: text }]).png().toBuffer();
+  const scene = buildSvg(spec);
+  const grid = STYLES[parseStyle(spec.style).base].grid;
+  let img;
+  if (grid) {
+    // Pixel style: render smooth, drop to a coarse grid, blow back up without smoothing.
+    const small = await sharp(Buffer.from(scene)).resize(grid, Math.round((grid * OUT_H) / OUT_W), { kernel: "nearest" }).png().toBuffer();
+    img = await sharp(small).resize(OUT_W, OUT_H, { kernel: "nearest" }).png().toBuffer();
+  } else {
+    img = await sharp(Buffer.from(scene)).resize(OUT_W, OUT_H).png().toBuffer();
+  }
+  const title = titleSvg(spec, spec._P, spec._bg);
+  return sharp(img).composite([{ input: Buffer.from(title) }]).png().toBuffer();
 }
 
 // Dominant colours of an image: a small k-means over a thumbnail, most common first.
@@ -343,20 +352,22 @@ const SAMPLE = {
   ],
 };
 
-async function gallery(out, base) {
-  const thumbW = 240, thumbH = 380, pad = 16, cols = 4, label = 26;
-  const names = STYLE_NAMES;
-  const rows = Math.ceil(names.length / cols);
-  const W = cols * thumbW + (cols + 1) * pad, H = rows * (thumbH + label) + (rows + 1) * pad;
+// The options shown to the parent: at most three, so choosing stays easy. An option can be a
+// mix ("paper+clay").
+export const DEFAULT_OPTIONS = ["balloon", "paper+clay", "crayon"];
+
+async function gallery(out, base, options = DEFAULT_OPTIONS) {
+  if (options.length > 3) throw new Error("show at most 3 options");
+  const thumbW = 300, thumbH = 475, pad = 20, label = 34;
+  const W = options.length * thumbW + (options.length + 1) * pad, H = thumbH + label + 2 * pad;
   const comps = [];
-  for (const [i, name] of names.entries()) {
+  for (const [i, name] of options.entries()) {
     const png = await render({ ...base, style: name });
-    const thumb = await sharp(png).resize(thumbW, thumbH).png().toBuffer();
-    const x = pad + (i % cols) * (thumbW + pad), y = pad + Math.floor(i / cols) * (thumbH + label + pad);
-    comps.push({ input: thumb, left: x, top: y });
-    comps.push({ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${thumbW}" height="${label}"><text x="${thumbW / 2}" y="19" font-size="16" font-family="Rubik" font-weight="700" text-anchor="middle" fill="#333">${i + 1}. ${name}</text></svg>`), left: x, top: y + thumbH + 2 });
+    const x = pad + i * (thumbW + pad);
+    comps.push({ input: await sharp(png).resize(thumbW, thumbH).png().toBuffer(), left: x, top: pad });
+    comps.push({ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${thumbW}" height="${label}"><text x="${thumbW / 2}" y="26" font-size="24" font-family="Rubik" font-weight="800" text-anchor="middle" fill="#333">${i + 1}</text></svg>`), left: x, top: pad + thumbH + 4 });
   }
-  await sharp({ create: { width: W, height: H, channels: 3, background: "#ececec" } }).composite(comps).png().toFile(out);
+  await sharp({ create: { width: W, height: H, channels: 3, background: "#f1efe9" } }).composite(comps).png().toFile(out);
   return out;
 }
 
@@ -366,8 +377,11 @@ if (isMain) {
   try {
     if (cmd === "list") console.log(JSON.stringify(Object.fromEntries(STYLE_NAMES.map((n) => [n, STYLES[n].describe])), null, 2));
     else if (cmd === "render") { writeFileSync(b, await render(JSON.parse(readFileSync(a, "utf8")))); console.log(b); }
-    else if (cmd === "gallery") console.log(await gallery(a, b ? JSON.parse(readFileSync(b, "utf8")) : SAMPLE));
+    else if (cmd === "gallery") {
+      const opt = process.argv.find((x) => x.startsWith("--options="));
+      console.log(await gallery(a, b && !b.startsWith("--") ? JSON.parse(readFileSync(b, "utf8")) : SAMPLE, opt ? opt.split("=")[1].split(",") : undefined));
+    }
     else if (cmd === "palette") console.log(JSON.stringify(await palette(a), null, 2));
-    else { console.error("usage: node styles.mjs list | render <spec.json> <out.png> | gallery <out.png> [spec.json] | palette <image>"); process.exit(1); }
+    else { console.error("usage: node styles.mjs list | render <spec.json> <out.png> | gallery <out.png> [spec.json] [--options=a,b+c,d] | palette <image>"); process.exit(1); }
   } catch (e) { console.error(e.message); process.exit(1); }
 }

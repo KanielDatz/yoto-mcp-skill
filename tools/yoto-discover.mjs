@@ -40,6 +40,9 @@ const TEMPLATE = {
   preferredLengthMinutes: { min: null, max: null },
   // "rss" | "files" | null. null means ask the parent each time.
   delivery: null,
+  // Cover style. null means offer options each time; set only after the parent agrees.
+  style: null,
+  styleChoices: [],
   avoid: [],
   notes: "",
   schedule: { frequency: "monthly", createdAt: null },
@@ -202,6 +205,8 @@ if (!profilePath || !cmd) {
       "  seen <feedUrl> <guid> <isoDate>            advance a feed's pointer",
       "  track <cardId> <feedUrl> [--auto] <title...>  follow a feed for a card",
       "  autoadd <feedUrl> on|off                   auto-add new episodes to that card",
+      "  stylepick <style> [cardTitle...]           record the cover style the parent chose",
+      "  styledefault <style>|off|declined <style>  set/clear the default, or note a no",
     ].join("\n")
   );
   process.exit(1);
@@ -379,6 +384,43 @@ switch (cmd) {
     f.autoAdd = state === "on";
     save(profilePath, profile);
     console.log(`auto-add ${state} for ${f.title || feedUrl}`);
+    break;
+  }
+
+  // Which cover style the parent picked, card by card. Once a style has won at least three of
+  // the last four picks and there is no default yet, the output says so - the agent then asks
+  // the parent whether to make it the default. It never sets one on its own.
+  case "stylepick": {
+    const [style, ...title] = rest;
+    if (!style) {
+      console.error("usage: stylepick <style> [cardTitle...]");
+      process.exit(1);
+    }
+    profile.styleChoices = profile.styleChoices || [];
+    profile.styleChoices.push({ style, card: title.join(" "), at: new Date().toISOString() });
+    save(profilePath, profile);
+    const recent = profile.styleChoices.slice(-4).map((c) => c.style);
+    const counts = recent.reduce((m, st) => ({ ...m, [st]: (m[st] || 0) + 1 }), {});
+    const [top, n] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    const askDefault = !profile.style && !profile.styleDeclined?.includes(top) && n >= 3 ? top : null;
+    console.log(JSON.stringify({ recorded: style, recent, default: profile.style || null, askDefault }, null, 2));
+    break;
+  }
+
+  case "styledefault": {
+    const [style] = rest;
+    if (!style) {
+      console.error("usage: styledefault <style>|off|declined <style>");
+      process.exit(1);
+    }
+    if (style === "declined") {
+      // the parent said no: don't ask about this style again
+      profile.styleDeclined = [...new Set([...(profile.styleDeclined || []), rest[1]])];
+    } else {
+      profile.style = style === "off" ? null : style;
+    }
+    save(profilePath, profile);
+    console.log(`default style: ${profile.style || "none (offer options each time)"}`);
     break;
   }
 
