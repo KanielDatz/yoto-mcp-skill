@@ -18,16 +18,16 @@ source's own artwork: the podcast cover, episode art, YouTube thumbnail or album
 cover uses that artwork and its colours, so the card looks like the show the child already
 knows.
 
-**Lets you pick a look — from at most three playful options.** Balloon, paper cut-out, clay,
-crayon, watercolour and more, or a mix of two. Titles are always plain, readable text over the
-art. If you keep picking the same style, it asks whether to make it the default.
+**Lets you pick from three very different covers, every time:** the real picture found for the
+content, a drawing of what it's about, and a second drawing in another style and layout.
+Styles include balloon, paper cut-out, clay, crayon and watercolour, or a mix of two. Titles
+are always plain, readable text over the art. If you keep picking the same style, it asks
+whether to make it the default, which then styles one of the drawings and never skips the
+choice.
 
-![Three cover options for one card](docs/cover-options.png)
+![Three cover options for one card: the story's own picture, a balloon drawing, a crayon drawing](docs/cover-options.png)
 
-The same card with the source's own artwork framed in each option — Hebrew and other
-right-to-left titles work too:
-
-![Cover options built around the source artwork](docs/source-art-options.png)
+Hebrew and other right-to-left titles work too.
 
 **Keeps pixel icons for every track**, since 16x16 pixel art is all the Yoto player's screen
 can show.
@@ -50,7 +50,7 @@ own language.
 - `SKILL.md` — the workflow the agent follows (art generation is a default step of the new-card pipeline)
 - `server/` — the Yoto MCP server (Node/TypeScript)
 - `art/` — pixel-art icons: `make.mjs` (Science-Yuck card), `make-ouz.mjs` (template for a new card), Rubik font
-- `art/styles.mjs` — covers in playful styles (balloon, paper cut-out, clay, crayon, watercolour, isometric, risograph, pixel, and mixes of two) from a JSON spec, a side-by-side view of up to three options, and palettes from source artwork
+- `art/styles.mjs` — covers in playful styles (balloon, paper cut-out, clay, crayon, watercolour, isometric, risograph, pixel, and mixes of two) from a JSON spec, a side-by-side view of the three cover options, and palettes from source artwork
 - `art/labels.mjs` — A4 PDF of sticker labels for the physical cards
 - `tools/yoto-brief.mjs` — what a source's audio is about (descriptions, chapters, transcripts, captions, tags) and its own artwork, gathered before designing the cover
 - `tools/yoto-chapters.mjs` — list / remove / rename chapters on an existing card
@@ -174,14 +174,16 @@ Icons must be 16x16 PNG, cover ~638x1011 portrait. Apply with the `yoto-set-card
 
 ```bash
 node tools/yoto-brief.mjs ./brief feed <feedUrl>      # or: youtube <url> | file <audio...> | image <url...>
-FONTCONFIG_FILE=$PWD/art/fonts.conf node art/styles.mjs gallery gallery.png spec.json
+FONTCONFIG_FILE=$PWD/art/fonts.conf node art/styles.mjs gallery options.png a.json b.json c.json
 FONTCONFIG_FILE=$PWD/art/fonts.conf node art/styles.mjs render spec.json cover.png
 ```
 
 The brief collects descriptions, chapters, transcripts/captions and tags, plus the source's
 own artwork (vetted, re-encoded to PNG) with its colour palette. The cover is designed from
 that, with the source's own images on it wherever possible, in a playful style the parent
-picks from at most three options (`gallery --options=...`, mixes like `paper+clay` allowed).
+picks from three very different options, every time: the real picture found for the content,
+a drawing, and a second drawing in a different style and layout (mixes like `paper+clay`
+allowed). A favourite style never skips the choice; it only styles one of the drawings.
 Titles are always plain readable text over the art. Track icons stay 16x16 pixel art - the
 only thing the Yoto screen shows. When the parent keeps picking the same style, the agent
 asks whether to make it the default (`stylepick` / `styledefault` in `yoto-discover.mjs`).

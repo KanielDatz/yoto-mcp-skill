@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-11-25 — three real cover options
+
+- Every new cover shows exactly three, very different designs: the real picture found for
+  the content, a drawing, and a second drawing in another style and layout. A saved
+  favourite style no longer skips the choice; it styles one of the drawings.
+- `styles.mjs gallery` takes three separate specs (`gallery out.png a.json b.json c.json`),
+  each with an optional `optionLabel` shown under its number.
+
 ## 2026-11-25 — lessons from real use
 
 - **Open sources first.** Audio comes from the parent's files, RSS, YouTube, Archive.org and

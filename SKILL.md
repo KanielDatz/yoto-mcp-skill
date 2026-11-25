@@ -129,8 +129,8 @@ Two things it does not do, which are on you:
 2. **Show a table and wait for approval before touching Yoto**: track #, title, duration, source. If unsure whether content is one long recording or separate songs, ask. One song per track is the usual wish.
 3. **Create the card**: `yoto-upload-audio` with track 1 (title = card title), then `yoto-add-track` for each remaining track **one at a time, in order** — wait for each to finish before the next; parallel adds can overwrite each other. Fix track 1's title afterwards: `node tools/yoto-chapters.mjs <cardId> rename 1 "<title>"`. Finish with `yoto-get-card` and check the track count matches the table.
 4. **Art — carry straight on.** Approving the card covers making its art; you show the
-   result before applying it (step 6). Style options (up to three) go with the step-2 table
-   — see "Cover styles". First get
+   result before applying it (step 6). The three cover options (real picture, drawing,
+   different drawing) go with the step-2 table — see "Cover styles". First get
    the **content brief** for the source: `node tools/yoto-brief.mjs <workDir>/brief feed|youtube|file|image ...`
    (see "Know the content first"). Design from what the audio is actually about and what the
    source itself looks like, not from the title: one icon per track plus a cover.
@@ -209,16 +209,30 @@ sea of background. Avoid `pixel` for covers with real artwork: it renders smooth
 downsamples, which blurs the artwork badly. Prefer `paper`, `paper+clay` or `watercolour`.
 (Track icons stay 16x16 pixel art either way.)
 
-**Offering styles — never more than three.** Pick up to three options that suit this card
-and render them side by side:
+**Always three options, each really different.** Every new cover (and every sticker made
+from a new cover) gets exactly three designs, side by side, numbered. Never skip this, and
+never send three textures of the same picture. Three separate specs:
+
+1. **The real picture.** The image found for the content (show art, the character, the
+   album cover), centred and large, sharp, in a light frame (`paper` or `watercolour`).
+   If the picture already carries the title, you may leave the overlay title out
+   (`"title": ""`).
+2. **A drawing.** An illustration of what the audio is about: its characters, objects and
+   setting, in one playful style (e.g. `balloon` or `clay`).
+3. **A second drawing.** A clearly different style *and* a different layout: if 2 is a scene,
+   make 3 one big character, or the other way round (e.g. `crayon` or `paper+clay`).
+
+No real picture found? Option 1 becomes a third drawing in yet another style; say so.
 
 ```bash
-FONTCONFIG_FILE=<art/fonts.conf> node art/styles.mjs gallery options.png spec.json --options=balloon,paper+clay,crayon
+FONTCONFIG_FILE=<art/fonts.conf> node art/styles.mjs gallery options.png a.json b.json c.json
 ```
 
-Send the picture with the step-2 table and let the parent answer with a number. Don't list
-every style, and don't explain them unless asked. `node art/styles.mjs list` has the whole
-kit for you to choose from:
+Give each spec an `"optionLabel"` ("the show's own picture", "drawing: balloon") and it
+appears under its number. Send the picture with the step-2 table and let the parent answer
+with a number. Don't explain the styles unless asked. (`gallery <out> spec.json
+--options=a,b,c` still renders one design in three styles, but only as a quick look for you,
+not as the options for the parent.) `node art/styles.mjs list` has the whole kit:
 
 | style | look | mixes well as |
 |---|---|---|
@@ -243,9 +257,10 @@ into the picture.
 `node tools/yoto-discover.mjs <profile> stylepick <style> <card title>`. Don't set a default
 yourself. When the output has `askDefault`, ask once — "you've picked balloon for most of
 the recent cards, want me to use it by default?" — then `styledefault <style>` on a yes, or
-`styledefault declined <style>` on a no, so you don't ask about it again. With a default
-set, use it without showing options, say which style you used, and offer the options
-whenever the parent wants something different.
+`styledefault declined <style>` on a no, so you don't ask about it again. **A default never
+replaces the three options**: it only decides that one of the two drawings uses the
+favourite style, and you mention it ("2 is in balloon, your usual"). Record the pick with
+`stylepick` every time; for option 1, record the frame style.
 
 **The spec** (full format at the top of `art/styles.mjs`): title and subtitle (in the
 content's own language, `"rtl": true` for Hebrew/Arabic), `palette` from the brief's
