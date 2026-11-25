@@ -1,6 +1,6 @@
 ---
 name: yoto
-description: Create and manage Yoto MYO cards from chat — upload audio, add tracks, and (by default) generate and apply pixel-art icons + cover. Use when asked to make or change a Yoto card, add songs/stories to a card, or give a card art. Also covers first-run setup: connecting the MCP server, registering a Yoto client ID, and authenticating.
+description: Create and manage Yoto MYO cards from chat — upload audio, add tracks, and (by default) generate and apply pixel-art icons + cover. Use when asked to make or change a Yoto card, add songs/stories to a card, give a card art, or print sticker labels for the physical cards (A4 PDF). Also covers first-run setup: connecting the MCP server, registering a Yoto client ID, and authenticating.
 ---
 
 # Yoto cards
@@ -64,26 +64,11 @@ is expected, nothing is listening there, and it does not mean anything broke. Wi
 warning most people stop and report a failure. Ask them to copy the `code=...` value from
 the address bar, pass it to `yoto-auth-complete`, and confirm with `yoto-check-auth`.
 
-**Art tooling not ready.** `cd art && npm install` (sharp), and set `<dir>` in
+**Art tooling not ready.** `cd art && npm install` (sharp, pdf-lib), and set `<dir>` in
 `art/fonts.conf` to the absolute path of `art/fonts`. Make that edit yourself; don't ask.
 
 If the token file sits somewhere ephemeral (a container's `$HOME`), say once that
 `YOTO_CONFIG_PATH` should point at persistent storage, or they re-authenticate every restart.
-
-## Sources
-
-This puts audio on a child's own player. The parent decides what goes on their family's
-card; your job is to build it.
-
-Normal and unremarkable, so just get on with it: files they already have, a CD they own,
-bought MP3s, podcast feeds, public-domain and openly licensed material, anything a creator
-offers, and audio taken with `yt-dlp` for their own child to listen to.
-
-The one line that matters: don't help turn a card into something distributed beyond the
-family — sharing audio publicly, selling cards, copying a catalogue wholesale.
-
-Never lecture about any of this, never raise it twice, and never answer a request with a
-refusal and no way forward.
 
 ## Check before downloading
 
@@ -130,6 +115,7 @@ Two things it does not do, which are on you:
 5. **Generate**: copy `art/make-ouz.mjs` as the template (16x16 grids using the palette in the file; cover is a 160x253 SVG upscaled to 638x1011). Run with `FONTCONFIG_FILE=<art/fonts.conf> node make-xyz.mjs`, open `sheet.png` and `cover.png` to eyeball before applying (check symmetry and stray gaps).
 6. **Apply**: `yoto-set-card-art` with `coverPath` and `icons: [{track, iconPath}, ...]`.
 7. Tell the user to re-sync the player to see changes.
+8. Offer a printable sticker label for the new card — see "Printable labels" below.
 
 **Card limits**, from Yoto's own support docs: **100 tracks** per card, **500 MB or 5
 hours** of audio per card, and **100 MB or 60 minutes** for any single track. Work the
@@ -140,8 +126,6 @@ you create; a Yoto Card linked from the app library is not subject to them.
 
 Finds content that fits one specific child and proposes it. `tools/yoto-discover.mjs` does
 the mechanical part; every judgement call, and every write to Yoto, stays with the parent.
-
-Sources are covered under "Sources" above.
 
 ### 1. The profile
 
@@ -284,6 +268,47 @@ updating three months ago is worse than one that asked.
 **Auto-add never applies to a new show.** It covers new episodes of a show already on a
 card. Anything the parent has not already approved goes through the proposal table as
 usual, however well it fits.
+
+## Printable labels
+
+Makes an A4 PDF of stickers to put on the physical cards: each card's cover art, card-shaped
+with rounded corners, with a thin grey outline to cut along. `art/labels.mjs` does it.
+
+**What the parent needs:** A4 PVC sticker paper — **matte** is recommended (no glare, takes
+ink well, survives small hands). Say this the first time labels come up.
+
+1. **Show the list and let them choose.** `node art/labels.mjs list` returns every card
+   with `cover: true|false`. Show it as a numbered table (title, has cover) with everything
+   that has a cover included by default, and let the parent exclude or add cards, or ask for
+   more than one copy of a card. A card without a cover can't print as is — mark it, and offer
+   to make its art first (pipeline steps 4–6). Cards made earlier in this session can use
+   their local `cover.png` directly.
+2. **Ask about a part-used sheet.** Before building, ask whether they have a sheet from an
+   earlier print with free spots left, and if so how many spots are already used. **Tell them
+   they can put it back in the printer** — the new labels go in the free spots. Pass that
+   number as `--skip=N`.
+3. **Confirm the count before building:** "11 labels → 2 sheets; the second sheet will have 2
+   of its 9 spots used."
+4. **Build:** `node art/labels.mjs pdf <out.pdf> <cardId|cover.png ...> [--skip=N]`. Repeat an
+   ID for extra copies. Defaults: 52 × 83.6 mm labels (1 mm inside the card's 54 × 85.6 mm
+   edge on each side, forgiving when sticking by hand; `--exact` for full card size), 5 mm
+   apart, 3 × 3 = **9 per sheet** — the most A4 fits at that spacing. `--no-guide` drops
+   the cut outline. Render a page to an image and look at it before handing the PDF over.
+5. **Printing instructions, every time:**
+   - Print at **100% / "Actual size"** — never "Fit to page", or the labels come out the
+     wrong size and stop matching the free spots on a reused sheet.
+   - Use the manual / rear feed tray if the printer has one; sticker sheets are thick.
+   - Set the paper type to matte / glossy photo or label paper, best quality.
+   - Not sure? Print once on plain paper and hold it against the sticker sheet to the light.
+6. **Leftover spots.** The output's `lastSheet` says how many spots are still free. If any
+   are, tell the parent: **keep the sheet — it can go through the printer again**, and next
+   time the labels will be placed in the free spots. Spots fill from the **bottom row up**,
+   so the top edge (which goes into the printer first) stays whole. Tell them to:
+   - cut out used labels **cleanly along the outline** rather than peeling stickers off the
+     sheet — loose backing or a lifted corner can catch inside the printer;
+   - feed the sheet back **the same way up and the same edge first** as the first time.
+   Remember the number of used spots for the next print (`nextSkip` in the output), and
+   still confirm it with the parent then — they may have used the sheet in between.
 
 ## RSS or downloaded files
 

@@ -5,6 +5,7 @@ Create Yoto MYO cards from an agent (Claude Code / NanoClaw / any MCP client): u
 - `SKILL.md` — the workflow the agent follows (art generation is a default step of the new-card pipeline)
 - `server/` — the Yoto MCP server (Node/TypeScript)
 - `art/` — pixel-art generator: `make.mjs` (Science-Yuck card), `make-ouz.mjs` (template for a new card), Rubik font
+- `art/labels.mjs` — A4 PDF of sticker labels for the physical cards
 - `tools/yoto-chapters.mjs` — list / remove / rename chapters on an existing card
 - `tools/yoto-discover.mjs` — per-child profiles and scheduled discovery of new content
 
@@ -38,7 +39,7 @@ someone else's. Registering takes a minute and is free.
 ## Credits
 
 The server is based on [bperkinspdx/yoto-mcp-server](https://github.com/bperkinspdx/yoto-mcp-server)
-(declared MIT in its `package.json`; the upstream repo ships no LICENSE file), with changes:
+with changes:
 PKCE + paste-the-code auth, correct add-track endpoint (`POST /content`), longer transcode
 polling, `yoto-set-card-art`, and a configurable token path. MIT licensed — see `LICENSE`.
 
@@ -104,12 +105,27 @@ The refresh token is saved and renewed automatically.
 ## 4. Art tooling
 
 ```bash
-cd art && npm install                       # sharp
+cd art && npm install                       # sharp, pdf-lib
 # edit fonts.conf: set <dir> to the absolute path of ./fonts
 FONTCONFIG_FILE=$PWD/fonts.conf node make-ouz.mjs ./out   # writes icon-*.png, cover.png, sheet.png
 ```
 
 Icons must be 16x16 PNG, cover ~638x1011 portrait. Apply with the `yoto-set-card-art` tool. To make art for a new card, copy `make-ouz.mjs`, replace the `ICONS` grids (palette chars at the top of the file) and the cover SVG text/composition.
+
+## 4a. Printable labels
+
+```bash
+node art/labels.mjs list                                   # your cards, and which have a cover
+node art/labels.mjs pdf labels.pdf <cardId> <cardId> ...   # A4 sheet, 9 labels per page
+node art/labels.mjs pdf labels.pdf <cardId> --skip=4       # reuse a sheet with 4 spots used
+```
+
+Print on A4 PVC sticker paper (matte recommended) at **100% / Actual size**. Labels are the
+card's cover art, 52 x 83.6 mm with rounded corners (`--exact` for the full 54 x 85.6 mm card
+size), 5 mm apart, with a thin cut outline (`--no-guide` to drop it). The grid never moves, so
+a part-used sheet can go back through the printer and `--skip` puts the new labels in the
+free spots. Spots fill from the bottom row up to keep the leading edge whole; cut used labels
+out cleanly rather than peeling them off the sheet, and feed it back the same way up.
 
 ## 5. Chapter tools
 
@@ -183,9 +199,3 @@ results".
 Profiles describe a child, so keep them out of git — `.gitignore` already covers
 `profiles/` and `*.profile.json`. Put them wherever `.yoto-mcp-config.json` lives, so they
 survive restarts.
-
-**Sources.** The parent decides what goes on their family's card; the skill builds it.
-Files they have, CDs, bought MP3s, podcast feeds, open-licensed material and `yt-dlp` audio
-for their own child are all just normal input. The skill is told not to lecture, not to
-raise the subject twice, and never to answer with a refusal and no way forward. The one
-thing it won't help with is distributing a card beyond the family.
