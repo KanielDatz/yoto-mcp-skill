@@ -283,32 +283,35 @@ ink well, survives small hands). Say this the first time labels come up.
    more than one copy of a card. A card without a cover can't print as is — mark it, and offer
    to make its art first (pipeline steps 4–6). Cards made earlier in this session can use
    their local `cover.png` directly.
-2. **Ask about a part-used sheet.** Before building, ask whether they have a sheet from an
-   earlier print with free spots left, and if so how many spots are already used. **Tell them
-   they can put it back in the printer** — the new labels go in the free spots. Pass that
-   number as `--skip=N`.
-3. **Confirm the count before building:** "11 labels → 2 sheets; the second sheet will have 2
-   of its 9 spots used."
-4. **Build:** `node art/labels.mjs pdf <out.pdf> <cardId|cover.png ...> [--skip=N]`. Repeat an
-   ID for extra copies. Defaults: 52 × 83.6 mm labels (1 mm inside the card's 54 × 85.6 mm
-   edge on each side, forgiving when sticking by hand; `--exact` for full card size), 5 mm
-   apart, 3 × 3 = **9 per sheet** — the most A4 fits at that spacing. `--no-guide` drops
-   the cut outline. Render a page to an image and look at it before handing the PDF over.
-5. **Printing instructions, every time:**
+2. **Ask whether they have a leftover piece** from an earlier print — a sheet cut along the
+   dashed line. Its height is printed along that line ("keep this piece: 210 x 114 mm"); if
+   they can't find it, ask them to measure it. Pass it as `--sheet=<height>`. No piece: a
+   whole A4 sheet, no flag.
+3. **Confirm before building:** how many labels, and whether there will be a leftover piece
+   to keep — "4 labels: two rows at the top, then you cut off a 210 x 114 mm piece that
+   takes 3 more next time." If the last row isn't full (`emptySpotsInLastRow`), say so: one
+   or two more cards would fill it at no extra cost in paper.
+4. **Build:** `node art/labels.mjs pdf <out.pdf> <cardId|cover.png ...> [--sheet=MM]`.
+   Repeat an ID for extra copies. Labels are 52 x 83.6 mm (1 mm inside the card's
+   54 x 85.6 mm edge on each side, forgiving when sticking by hand), 5 mm apart, with a grey
+   outline to cut along — 3 per row, 9 on a whole A4 sheet. They pack from the top so the
+   rest of the sheet stays in one piece. Render the page to an image and look at it before
+   handing the PDF over.
+5. **The cut line.** When the space under the last row can still take a row of labels, the
+   PDF has a dashed line across the full width with the leftover piece's size on it (`leftover`
+   in the output). Tell the parent: **cut along the dashed line first and keep the lower
+   piece — it goes back in the printer next time.** Then cut out the labels from the top
+   part. No `leftover` means the rest is too small to reuse; say nothing about it.
+6. **Printing instructions, every time:**
    - Print at **100% / "Actual size"** — never "Fit to page", or the labels come out the
-     wrong size and stop matching the free spots on a reused sheet.
+     wrong size.
    - Use the manual / rear feed tray if the printer has one; sticker sheets are thick.
-   - Set the paper type to matte / glossy photo or label paper, best quality.
+   - Set the paper type to matte photo or label paper, best quality.
+   - **On a leftover piece:** set the paper size in the print dialog to a custom size of
+     exactly that piece (e.g. 210 x 114 mm), and feed it with the original, factory edge
+     first rather than the hand-cut edge. Very short pieces may be below the printer's
+     minimum paper length — if the printer refuses one, use a whole sheet.
    - Not sure? Print once on plain paper and hold it against the sticker sheet to the light.
-6. **Leftover spots.** The output's `lastSheet` says how many spots are still free. If any
-   are, tell the parent: **keep the sheet — it can go through the printer again**, and next
-   time the labels will be placed in the free spots. Spots fill from the **bottom row up**,
-   so the top edge (which goes into the printer first) stays whole. Tell them to:
-   - cut out used labels **cleanly along the outline** rather than peeling stickers off the
-     sheet — loose backing or a lifted corner can catch inside the printer;
-   - feed the sheet back **the same way up and the same edge first** as the first time.
-   Remember the number of used spots for the next print (`nextSkip` in the output), and
-   still confirm it with the parent then — they may have used the sheet in between.
 
 ## RSS or downloaded files
 
