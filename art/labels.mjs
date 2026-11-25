@@ -7,8 +7,10 @@
 // Repeat an item to print it more than once.
 //
 // Options:
-//   --sheet=MM   print on a leftover piece MM tall (full A4 width) instead of a whole A4 sheet.
-//                Only the first page; any overflow goes on whole A4 sheets.
+//   --piece=ID   print on leftover piece #ID (see `pieces`); it is taken off the record
+//   --sheet=MM   print on a leftover piece MM tall (full A4 width) that isn't on record
+//                Either way only the first page; any overflow goes on whole A4 sheets.
+//   --no-record  don't touch the record of leftover pieces (previews, tests)
 //   --exact      exact card size, 54 x 85.6 mm (default: 52 x 83.6 mm, 1 mm inset per side)
 //   --no-guide   leave out the grey cut outline around each label
 //
@@ -16,13 +18,19 @@
 // least height (11 fit on a whole A4 sheet). When the unused part below them is still tall
 // enough for a label, a dashed line is drawn across the whole sheet just under them, labelled
 // with the leftover piece's size: cut there and keep the lower piece. It goes back through the
-// printer later with --sheet=<its height>.
+// printer later. Under the line the piece gets its number and size ("#3  210 x 114 mm",
+// readable from a photo) and arrows pointing at the edge that goes into the printer first.
+// The piece is recorded in .yoto-labels.json next to the token file:
+//   node labels.mjs pieces               pieces on record
+//   node labels.mjs pieces add <mm>      a piece measured by hand
+//   node labels.mjs pieces drop <id>     used up, lost, or never printed
 //
 // Reads the token the MCP server saved after yoto-auth. Set YOTO_CONFIG_PATH if it's not
 // ../server/.yoto-mcp-config.json
 import sharp from "sharp";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { readFileSync, writeFileSync, existsSync } from "fs";
+import { dirname, join } from "path";
 
 const MM = 72 / 25.4; // PDF points per mm
 const PAGE_W = 210, PAGE_H = 297; // A4, mm
@@ -31,7 +39,7 @@ const MARGIN = 8; // mm kept clear at the top and bottom of every sheet or piece
 const SIDE = 5; // mm minimum clear at the left and right edges
 const DPI = 300;
 const API = "https://api.yotoplay.com";
-const USAGE = "usage: node labels.mjs list | pdf <out.pdf> <cardId|image...> [--sheet=MM] [--exact] [--no-guide]";
+const USAGE = "usage: node labels.mjs list | pieces [add <mm> | drop <id>] | pdf <out.pdf> <cardId|image...> [--piece=ID | --sheet=MM] [--exact] [--no-guide] [--no-record]";
 
 const args = process.argv.slice(2);
 const flags = Object.fromEntries(args.filter((a) => a.startsWith("--")).map((a) => {
@@ -41,8 +49,11 @@ const flags = Object.fromEntries(args.filter((a) => a.startsWith("--")).map((a) 
 const pos = args.filter((a) => !a.startsWith("--"));
 const [cmd, ...rest] = pos;
 
+const configPath = () =>
+  process.env.YOTO_CONFIG_PATH || new URL("../server/.yoto-mcp-config.json", import.meta.url).pathname;
+
 function token() {
-  const p = process.env.YOTO_CONFIG_PATH || new URL("../server/.yoto-mcp-config.json", import.meta.url).pathname;
+  const p = configPath();
   if (!existsSync(p)) throw new Error(`No Yoto token at ${p} - authenticate with yoto-auth first (or set YOTO_CONFIG_PATH)`);
   return JSON.parse(readFileSync(p, "utf8")).accessToken;
 }
@@ -87,6 +98,30 @@ const roundRect = (w, h, r) =>
   `M ${r} 0 H ${w - r} A ${r} ${r} 0 0 1 ${w} ${r} V ${h - r} A ${r} ${r} 0 0 1 ${w - r} ${h} ` +
   `H ${r} A ${r} ${r} 0 0 1 0 ${h - r} V ${r} A ${r} ${r} 0 0 1 ${r} 0 Z`;
 
+// Leftover pieces the parent has kept, so the next print can use one without asking them to
+// measure it. Lives next to the token file (persistent storage), never in the repo.
+const statePath = () => process.env.YOTO_LABELS_STATE || join(dirname(configPath()), ".yoto-labels.json");
+function loadState() {
+  try { return JSON.parse(readFileSync(statePath(), "utf8")); } catch { return { next: 1, pieces: [] }; }
+}
+const saveState = (st) => writeFileSync(statePath(), JSON.stringify(st, null, 2) + "\n");
+
+function pieces([sub, arg]) {
+  const st = loadState();
+  if (sub === "drop") {
+    const before = st.pieces.length;
+    st.pieces = st.pieces.filter((p) => String(p.id) !== String(arg));
+    if (st.pieces.length === before) throw new Error(`No piece #${arg}`);
+    saveState(st);
+  } else if (sub === "add") {
+    const h = Math.floor(Number(arg));
+    if (!(h > 0 && h <= PAGE_H)) throw new Error("usage: pieces add <heightMm>");
+    st.pieces.push({ id: st.next++, widthMm: PAGE_W, heightMm: h, made: new Date().toISOString().slice(0, 10) });
+    saveState(st);
+  } else if (sub) throw new Error("usage: pieces [add <heightMm> | drop <id>]");
+  console.log(JSON.stringify(st.pieces, null, 2));
+}
+
 async function pdf(out, items) {
   if (!out || !items.length) throw new Error(USAGE);
   const exact = !!flags.exact;
@@ -116,7 +151,14 @@ async function pdf(out, items) {
     return { cols, h: usable };
   }
 
-  const firstH = flags.sheet ? Number(flags.sheet) : PAGE_H;
+  const record = !flags["no-record"];
+  const st = loadState();
+  let usedPiece = null;
+  if (flags.piece) {
+    usedPiece = st.pieces.find((p) => String(p.id) === String(flags.piece));
+    if (!usedPiece) throw new Error(`No piece #${flags.piece} on record - use --sheet=<height> instead`);
+  }
+  const firstH = usedPiece ? usedPiece.heightMm : flags.sheet ? Number(flags.sheet) : PAGE_H;
   if (!(firstH > 0 && firstH <= PAGE_H)) throw new Error(`--sheet must be a height in mm, up to ${PAGE_H}`);
   if (!maxCap(firstH)) throw new Error(`A ${firstH} mm piece is too short for a label (needs ${Math.ceil(W + 2 * MARGIN)} mm)`);
 
@@ -177,26 +219,42 @@ async function pdf(out, items) {
       start: { x: 0, y: yPt }, end: { x: PAGE_W * MM, y: yPt },
       thickness: 0.6, color: rgb(0.3, 0.3, 0.3), dashArray: [6, 4],
     });
-    const note = `cut  -  keep this piece: ${PAGE_W} x ${leftoverH} mm`;
+    // Marker on the piece being kept, in the strip just under the line. That strip becomes the
+    // piece's bottom margin next time, so later labels never print over it.
+    // Arrows point at the factory edge: the end that goes into the printer first.
+    const id = record ? st.next++ : null;
+    const grey = rgb(0.4, 0.4, 0.4);
+    const note = `${id ? `#${id}    ` : ""}${PAGE_W} x ${leftoverH} mm`;
+    const size = 11;
     page.drawText(note, {
-      x: (PAGE_W * MM - font.widthOfTextAtSize(note, 7)) / 2, y: yPt - 9,
-      size: 7, font, color: rgb(0.45, 0.45, 0.45),
+      x: (PAGE_W * MM - font.widthOfTextAtSize(note, size)) / 2, y: (pageH - cutY - 5.5) * MM,
+      size, font, color: grey,
     });
-    leftover = { widthMm: PAGE_W, heightMm: leftoverH, labelsFit: maxCap(leftoverH), nextFlag: `--sheet=${leftoverH}` };
+    const arrow = `M 0 0 H ${4 * MM} L ${2 * MM} ${4.5 * MM} Z`;
+    for (const ax of [12, 55, 151, 194]) {
+      page.drawSvgPath(arrow, { x: (ax - 2) * MM, y: (pageH - cutY - 1.5) * MM, color: grey });
+    }
+    leftover = { id, widthMm: PAGE_W, heightMm: leftoverH, labelsFit: maxCap(leftoverH), nextFlag: id ? `--piece=${id}` : `--sheet=${leftoverH}` };
   }
 
   writeFileSync(out, await doc.save());
+  if (record) {
+    if (usedPiece) st.pieces = st.pieces.filter((p) => p !== usedPiece);
+    if (leftover) st.pieces.push({ id: leftover.id, widthMm: PAGE_W, heightMm: leftoverH, made: new Date().toISOString().slice(0, 10) });
+    if (usedPiece || leftover) saveState(st);
+  }
   console.log(JSON.stringify({
     pdf: out, labels: placed.length, pages: doc.getPageCount(),
     labelSizeMm: [W, H], firstSheetMm: [PAGE_W, firstH], perFullA4: maxCap(PAGE_H),
     freeSpotsAboveCut: freeSpots, // more cards would fit here without using more paper
-    leftover, placed,
+    usedPiece: usedPiece ? usedPiece.id : null, leftover, piecesOnRecord: st.pieces, placed,
   }, null, 2));
 }
 
 try {
   if (cmd === "list") await list();
   else if (cmd === "pdf") await pdf(rest[0], rest.slice(1));
+  else if (cmd === "pieces") pieces(rest);
   else {
     console.error(USAGE);
     process.exit(1);

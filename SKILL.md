@@ -283,35 +283,52 @@ ink well, survives small hands). Say this the first time labels come up.
    more than one copy of a card. A card without a cover can't print as is — mark it, and offer
    to make its art first (pipeline steps 4–6). Cards made earlier in this session can use
    their local `cover.png` directly.
-2. **Ask whether they have a leftover piece** from an earlier print — a sheet cut along the
-   dashed line. Its height is printed along that line ("keep this piece: 210 x 114 mm"); if
-   they can't find it, ask them to measure it. Pass it as `--sheet=<height>`. No piece: a
-   whole A4 sheet, no flag.
+2. **Leftover pieces.** Run `node art/labels.mjs pieces` — the pieces from earlier prints
+   that are on record, each with its number and size. If there are any, offer the one that
+   fits the labels best ("you still have piece #2, 210 x 114 mm — it takes 3") and ask if they
+   still have it; the parent may have used or lost it since. If they say it's gone,
+   `pieces drop <id>`.
+   - **A piece not on record:** every kept piece has its number and size printed under the
+     cut line ("#2  210 x 114 mm"), so ask the parent to read it out or send a photo of it.
+     A number on record → `--piece=<id>`. A number you can't match, or no marking (a piece
+     cut by hand) → ask them to measure the height in mm and use `--sheet=<height>`.
+   - No piece: a whole A4 sheet, no flag.
 3. **Confirm before building:** how many labels, and whether there will be a leftover piece
    to keep — "4 labels in a strip at the top, then you cut off a 210 x 177 mm piece that
    takes 4 more next time." If `freeSpotsAboveCut` is above 0, say so: that many more cards
    would fit above the cut line at no extra cost in paper.
-4. **Build:** `node art/labels.mjs pdf <out.pdf> <cardId|cover.png ...> [--sheet=MM]`.
+4. **Build:** `node art/labels.mjs pdf <out.pdf> <cardId|cover.png ...> [--piece=ID | --sheet=MM]`.
    Repeat an ID for extra copies. Labels are 52 x 83.6 mm (1 mm inside the card's
    54 x 85.6 mm edge on each side, forgiving when sticking by hand), 5 mm apart, with a grey
    outline to cut along. The script mixes upright and sideways labels in whichever
    arrangement uses the least height — up to 11 on a whole A4 sheet — and packs them at the
    top so the rest of the sheet stays in one piece. Which way a label lies on the paper makes
-   no difference to the card; it still goes on upright. Render the page to an image and look at it before
-   handing the PDF over.
+   no difference to the card; it still goes on upright. Render the page to an image and look
+   at it before handing the PDF over.
+
+   Building updates the record: a piece used with `--piece` comes off it and any new leftover
+   goes on, so build only what is going to be printed. For a preview, add `--no-record`. If
+   the parent then doesn't print it after all, `pieces drop` the new piece and `pieces add
+   <mm>` the one they still have.
 5. **The cut line.** When the space under the labels can still take at least one label, the
-   PDF has a dashed line across the full width with the leftover piece's size on it (`leftover`
-   in the output). Tell the parent: **cut along the dashed line first and keep the lower
-   piece — it goes back in the printer next time.** Then cut out the labels from the top
-   part. No `leftover` means the rest is too small to reuse; say nothing about it.
+   PDF has a dashed line across the full width (`leftover` in the output). Just under it the
+   piece gets its number and size ("#3  210 x 177 mm") and a row of ▼ arrows. Tell the parent:
+   - **cut along the dashed line first and keep the lower piece** — it goes back in the
+     printer next time; then cut out the labels from the top part;
+   - **the arrows point at the end that goes into the printer first** next time (the
+     original edge of the sheet, not the hand-cut one), printed side the same way up as
+     today;
+   - they don't need to remember any of it — you have the piece on record, and the number
+     is printed on it in case it gets mixed up with others.
+   No `leftover` means the rest is too small to reuse; say nothing about it.
 6. **Printing instructions, every time:**
    - Print at **100% / "Actual size"** — never "Fit to page", or the labels come out the
      wrong size.
    - Use the manual / rear feed tray if the printer has one; sticker sheets are thick.
    - Set the paper type to matte photo or label paper, best quality.
    - **On a leftover piece:** set the paper size in the print dialog to a custom size of
-     exactly that piece (e.g. 210 x 114 mm), and feed it with the original, factory edge
-     first rather than the hand-cut edge. Very short pieces may be below the printer's
+     exactly that piece (e.g. 210 x 114 mm), and feed it in the way its arrows point. The
+     marked strip falls in the margin of the new print, so nothing is printed over it. Very short pieces may be below the printer's
      minimum paper length — if the printer refuses one, use a whole sheet.
    - Not sure? Print once on plain paper and hold it against the sticker sheet to the light.
 

@@ -117,7 +117,8 @@ Icons must be 16x16 PNG, cover ~638x1011 portrait. Apply with the `yoto-set-card
 ```bash
 node art/labels.mjs list                                   # your cards, and which have a cover
 node art/labels.mjs pdf labels.pdf <cardId> <cardId> ...   # whole A4 sheet, up to 11 labels
-node art/labels.mjs pdf labels.pdf <cardId> --sheet=114    # print on a 210 x 114 mm leftover piece
+node art/labels.mjs pdf labels.pdf <cardId> --piece=2      # print on leftover piece #2
+node art/labels.mjs pieces                                 # leftover pieces on record
 ```
 
 Print on A4 PVC sticker paper (matte recommended) at **100% / Actual size**. Labels are the
@@ -125,8 +126,11 @@ card's cover art, 52 x 83.6 mm with rounded corners (`--exact` for the full 54 x
 size), 5 mm apart, with a thin cut outline (`--no-guide` to drop it). Upright and sideways
 labels are mixed to use the least height (11 per A4 sheet), packed at the top, and when the
 rest of the sheet can still take a label, a dashed line marks where to cut it off,
-with the leftover piece's size printed on it. Keep that piece and print on it next time with
-`--sheet=<height>`, setting a custom paper size of the same dimensions in the print dialog.
+and the piece below it is marked with its number and size ("#2  210 x 114 mm") and arrows
+pointing at the end to feed into the printer first. Keep it and print on it next time with
+`--piece=<id>` (or `--sheet=<height>` for a piece cut by hand), setting a custom paper size of
+the same dimensions in the print dialog. Pieces are recorded in `.yoto-labels.json` next to
+the token file; `pieces add <mm>` / `pieces drop <id>` correct the record.
 
 ## 5. Chapter tools
 
