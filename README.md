@@ -1,12 +1,55 @@
 # yoto skill
 
-Create Yoto MYO cards from an agent (Claude Code / NanoClaw / any MCP client): upload audio, add tracks, set pixel-art icons and a cover, and edit chapters.
+Create Yoto Make-Your-Own cards by chatting with an agent (Claude Code, NanoClaw or any MCP
+client): it finds and uploads the audio, adds the tracks, draws a cover and a pixel icon for
+every track, and prints stickers for the physical cards.
 
 ![Playful covers and printable stickers](docs/new-features.png)
 
+## What it does
+
+**Builds the card.** Upload audio from files, podcasts or YouTube, one track per song or
+episode, within Yoto's limits. It can keep a podcast card up to date as new episodes come out,
+and suggest new content that fits each child.
+
+**Draws art from what's actually in the audio.** Before designing anything it reads the
+source — episode descriptions, chapters, transcripts, captions, tags — and collects the
+source's own artwork: the podcast cover, episode art, YouTube thumbnail or album art. The
+cover uses that artwork and its colours, so the card looks like the show the child already
+knows.
+
+**Lets you pick a look — from at most three playful options.** Balloon, paper cut-out, clay,
+crayon, watercolour and more, or a mix of two. Titles are always plain, readable text over the
+art. If you keep picking the same style, it asks whether to make it the default.
+
+![Three cover options for one card](docs/cover-options.png)
+
+The same card with the source's own artwork framed in each option — Hebrew and other
+right-to-left titles work too:
+
+![Cover options built around the source artwork](docs/source-art-options.png)
+
+**Keeps pixel icons for every track**, since 16x16 pixel art is all the Yoto player's screen
+can show.
+
+![Pixel-art track icons](docs/pixel-icons.png)
+
+**Prints stickers for the cards.** An A4 PDF of labels with rounded corners and a cut outline,
+upright and sideways mixed to fit up to 11 on a sheet, packed at the top. A dashed line marks
+where to cut off the unused part, labelled with its number and size, so the piece can go back
+in the printer next time — the agent remembers which pieces you have. Matte A4 PVC sticker
+paper is recommended.
+
+![An A4 sticker sheet with the cut line](docs/sticker-sheet.png)
+
+**Speaks your language.** Replies in the parent's language and keeps titles in the content's
+own language.
+
+## What's in the repo
+
 - `SKILL.md` — the workflow the agent follows (art generation is a default step of the new-card pipeline)
 - `server/` — the Yoto MCP server (Node/TypeScript)
-- `art/` — pixel-art generator: `make.mjs` (Science-Yuck card), `make-ouz.mjs` (template for a new card), Rubik font
+- `art/` — pixel-art icons: `make.mjs` (Science-Yuck card), `make-ouz.mjs` (template for a new card), Rubik font
 - `art/styles.mjs` — covers in playful styles (balloon, paper cut-out, clay, crayon, watercolour, isometric, risograph, pixel, and mixes of two) from a JSON spec, a side-by-side view of up to three options, and palettes from source artwork
 - `art/labels.mjs` — A4 PDF of sticker labels for the physical cards
 - `tools/yoto-brief.mjs` — what a source's audio is about (descriptions, chapters, transcripts, captions, tags) and its own artwork, gathered before designing the cover
