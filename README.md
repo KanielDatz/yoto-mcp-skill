@@ -25,7 +25,7 @@ are always plain, readable text over the art. If you keep picking the same style
 whether to make it the default, which then styles one of the drawings and never skips the
 choice.
 
-![Three cover options for one card: the story's own picture, a balloon drawing, a crayon drawing](docs/cover-options.png)
+![Three cover options for one card: the podcast's own picture, a balloon drawing, a crayon drawing](docs/cover-options.png)
 
 Hebrew and other right-to-left titles work too.
 
