@@ -69,11 +69,11 @@ function imageOf(block) {
   )?.replace(/&amp;/g, "&");
 }
 
-export function parseChannel(xml) {
+export function parseChannel(xml, maxDesc = 400) {
   const head = xml.split(/<item(?:\s|>)|<entry(?:\s|>)/i)[0];
   return {
     title: tag(head, ["title"]),
-    description: tag(head, ["description", "itunes:summary", "subtitle"]).slice(0, 400),
+    description: tag(head, ["description", "itunes:summary", "subtitle"]).slice(0, maxDesc),
     language: (/<language(?:\s[^>]*)?>([\s\S]*?)<\/language>/i.exec(head)?.[1] || "").trim() || null,
     author: tag(head, ["itunes:author", "managingEditor", "author"]),
     explicit: /<itunes:explicit(?:\s[^>]*)?>\s*(?:yes|true)\s*<\/itunes:explicit>/i.test(head),
@@ -81,7 +81,8 @@ export function parseChannel(xml) {
   };
 }
 
-export function parseFeed(xml) {
+// maxDesc: discovery keeps descriptions short; the cover brief reads them nearly whole.
+export function parseFeed(xml, maxDesc = 400) {
   const blocks = [
     ...xml.matchAll(/<item(?:\s[^>]*)?>([\s\S]*?)<\/item>/gi),
     ...xml.matchAll(/<entry(?:\s[^>]*)?>([\s\S]*?)<\/entry>/gi),
@@ -97,7 +98,7 @@ export function parseFeed(xml) {
     return {
       guid: tag(b, ["guid", "id"]) || enclosure || tag(b, ["title"]),
       title: tag(b, ["title"]),
-      description: tag(b, ["description", "itunes:summary", "summary", "content"]).slice(0, 400),
+      description: tag(b, ["description", "itunes:summary", "summary", "content"]).slice(0, maxDesc),
       date: parsed && !Number.isNaN(parsed.valueOf()) ? parsed.toISOString() : null,
       durationSeconds: durationSeconds(tag(b, ["itunes:duration"])),
       audioUrl: enclosure,
