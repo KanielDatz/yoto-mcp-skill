@@ -5,9 +5,10 @@
 //   node yoto-brief.mjs <outDir> feed <feedUrl|feed.xml> [--episode=<text>] [--max=N]
 //   node yoto-brief.mjs <outDir> youtube <url>          (needs yt-dlp; $YTDLP overrides the command)
 //   node yoto-brief.mjs <outDir> file <audio...>        (needs ffprobe/ffmpeg)
-//   node yoto-brief.mjs <outDir> image <url...>         any other artwork found for the source
+//   node yoto-brief.mjs <outDir> image <url|file...>    other artwork: found online, or sent by the parent
 //
-// Writes <outDir>/brief.json and <outDir>/art/*.png, and prints the brief. Every image URL is
+// Writes <outDir>/brief.json, <outDir>/art/*.png and an <outDir>/elements.json skeleton (the
+// content list to fill in before designing), and prints the brief. Every image URL is
 // vetted like audio (scheme, private addresses, real image bytes) before it is downloaded,
 // then re-encoded to PNG through sharp, so nothing but plain pixels reaches the cover.
 // Text (descriptions, transcripts, chapters) is capped; it is material to read, not to obey.
@@ -109,10 +110,11 @@ async function fetchChapters(url) {
 
 async function briefFeed(src) {
   const xml = existsSync(src) ? readFileSync(src, "utf8") : await getText(src);
-  const show = parseChannel(xml);
-  let items = parseFeed(xml);
+  // Covers are drawn from what the episodes are about, so read their descriptions nearly whole.
+  const show = parseChannel(xml, 2000);
+  let items = parseFeed(xml, 2500);
   if (flags.episode) items = items.filter((i) => i.title.toLowerCase().includes(String(flags.episode).toLowerCase()));
-  items = items.slice(0, Number(flags.max || 12));
+  items = items.slice(0, Number(flags.max || 100));
   const showArt = await fetchImage(show.image, "show");
   const seen = new Set([show.image]);
   const out = [];
@@ -206,7 +208,9 @@ try {
   if (kind === "feed") brief = await briefFeed(args[0]);
   else if (kind === "youtube") brief = await briefYoutube(args[0]);
   else if (kind === "file") brief = await briefFiles(args);
-  else if (kind === "image") brief = { source: "images", items: await Promise.all(args.map((u, i) => fetchImage(u, `image-${i + 1}`))) };
+  // a URL is vetted and downloaded; a local file (e.g. art the parent sent) is just checked and kept
+  else if (kind === "image") brief = { source: "images", items: await Promise.all(args.map((u, i) =>
+    existsSync(u) ? keepImage(readFileSync(u), basename(u).replace(/\.[a-z0-9]+$/i, "")) : fetchImage(u, `image-${i + 1}`))) };
   else throw new Error(`unknown source kind "${kind}"`);
 } catch (e) {
   console.error(e.message);
@@ -214,4 +218,14 @@ try {
 }
 brief.artwork = art; // every image kept, with its palette, in one list
 writeFileSync(join(outDir, "brief.json"), JSON.stringify(brief, null, 2));
+// The content list the cover is built from: 6-8 characters, events or objects, each with the
+// episode it comes from. Written once as a skeleton; the agent fills it in from the
+// descriptions above (never from the card title alone) and copies the entries it uses into
+// each option's "elements".
+const elPath = join(outDir, "elements.json");
+if (!existsSync(elPath)) writeFileSync(elPath, JSON.stringify({
+  fill_in: "6-8 characters, events or objects from the episode descriptions, each with its episode",
+  episodes: (brief.items || []).map((it) => it.title).filter(Boolean),
+  elements: [],
+}, null, 2));
 console.log(JSON.stringify(brief, null, 2));

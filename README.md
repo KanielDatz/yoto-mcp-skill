@@ -18,12 +18,12 @@ source's own artwork: the podcast cover, episode art, YouTube thumbnail or album
 cover uses that artwork and its colours, so the card looks like the show the child already
 knows.
 
-**Lets you pick from three very different covers, every time:** the real picture found for the
-content, a drawing of what it's about, and a second drawing in another style and layout.
-Styles include balloon, paper cut-out, clay, crayon and watercolour, or a mix of two. Titles
-are always plain, readable text over the art. If you keep picking the same style, it asks
-whether to make it the default, which then styles one of the drawings and never skips the
-choice.
+**Lets you pick from three covers that are really different, every time.** Each is a new idea
+built from what's in the episodes: a treasure map past one stop per episode, a collector card,
+a paper-box diorama, a whole pixel-game level, a board game, a postage stamp, and more. The
+show's real picture sits in the middle of each one. Titles are always plain, readable text
+over the art, and nothing is applied until you pick a number; the old cover is backed up
+first.
 
 ![Three cover options for one card: the podcast's own picture, a balloon drawing, a crayon drawing](docs/cover-options.png)
 
@@ -55,6 +55,7 @@ own language.
 - `tools/yoto-brief.mjs` — what a source's audio is about (descriptions, chapters, transcripts, captions, tags) and its own artwork, gathered before designing the cover
 - `tools/yoto-chapters.mjs` — list / remove / rename chapters on an existing card
 - `tools/yoto-discover.mjs` — per-child profiles and scheduled discovery of new content
+- `tools/yoto-cover-backup.mjs` — saves a card's current cover and icons before new art is applied
 - `tools/yt-dlp-proxy.py` — runs yt-dlp behind an HTTPS-intercepting proxy, trusting its CA
 - `CHANGELOG.md` — what changed, newest first
 
@@ -170,28 +171,31 @@ in a Linux container ("Cannot find module sharp-linux-x64.node").
 
 Icons must be 16x16 PNG, cover ~638x1011 portrait. Apply with the `yoto-set-card-art` tool. To make art for a new card, copy `make-ouz.mjs`, replace the `ICONS` grids (palette chars at the top of the file) and the cover SVG text/composition.
 
-## 4a. Content brief and cover styles
+## 4a. Content brief and cover concepts
 
 ```bash
-node tools/yoto-brief.mjs ./brief feed <feedUrl>      # or: youtube <url> | file <audio...> | image <url...>
+node tools/yoto-brief.mjs ./brief feed <feedUrl>      # or: youtube <url> | file <audio...> | image <url|file...>
+node art/styles.mjs inspire                           # three random, different concepts to start from
 FONTCONFIG_FILE=$PWD/art/fonts.conf node art/styles.mjs gallery options.png a.json b.json c.json
+node art/styles.mjs chosen 2                          # record the parent's pick
+node tools/yoto-cover-backup.mjs <cardId>             # save the old cover + icons before applying
 FONTCONFIG_FILE=$PWD/art/fonts.conf node art/styles.mjs render spec.json cover.png
 ```
 
-The brief collects descriptions, chapters, transcripts/captions and tags, plus the source's
-own artwork (vetted, re-encoded to PNG) with its colour palette. The cover is designed from
-that, with the source's own images on it wherever possible, in a playful style the parent
-picks from three very different options, every time: the real picture found for the content,
-a drawing, and a second drawing in a different style and layout (mixes like `paper+clay`
-allowed). A favourite style never skips the choice; it only styles one of the drawings.
-Titles are always plain readable text over the art. Track icons stay 16x16 pixel art - the
-only thing the Yoto screen shows. When the parent keeps picking the same style, the agent
-asks whether to make it the default (`stylepick` / `styledefault` in `yoto-discover.mjs`).
+Every cover follows one process (details in `SKILL.md`, "Cover concepts"): read every
+episode's description, list 6-8 characters, events or objects with the episode each comes
+from (`elements.json`), put the show's official picture in the middle, and design three
+options that differ in concept, composition and technique, with the content's objects drawn
+by hand. `gallery` refuses options that are the same design in another filter, lack the
+content list or the real picture, or repeat a concept from one of the last eight cards.
+Styles: `balloon`, `paper`, `clay`, `crayon`, `watercolour`, `isometric`, `risograph`,
+`pixel` (a whole game scene) and `diorama` (paper layers in depth with shadows).
 
-Original artwork tied to the content (the character, the show's logo, the album art) goes
-on the cover centred, never redrawn; the brief trims plain empty margins off saved images.
-Avoid the `pixel` style for covers with real artwork, because it blurs it. `paper`,
-`paper+clay` and `watercolour` keep it sharp. The agent shows the cover before applying it.
+The brief collects nearly full episode descriptions, chapters, transcripts/captions and tags,
+plus the source's own artwork (vetted, re-encoded to PNG) with its colour palette, and writes
+an `elements.json` skeleton to fill in. Track icons stay 16x16 pixel art - the only thing the
+Yoto screen shows. When the parent keeps picking the same style, the agent asks whether to
+make it the default (`stylepick` / `styledefault` in `yoto-discover.mjs`).
 
 `youtube` needs `yt-dlp` (set `YTDLP` to use another build, see "yt-dlp" below), `file` needs
 `ffprobe`/`ffmpeg`; behind a proxy run Node with `NODE_USE_ENV_PROXY=1`.

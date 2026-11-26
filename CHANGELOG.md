@@ -1,5 +1,27 @@
 # Changelog
 
+## 2026-11-26 — creative covers built from the content
+
+- Required cover process: read every episode's description, list 6-8 elements with their
+  episode (`elements.json`), put the official picture in the middle, design three options
+  that differ in concept, composition and technique, show them, wait, back up, apply.
+- `styles.mjs inspire` draws three random, different concepts from a library of 22 (treasure
+  map, time machine, collector card, board game, diorama, pixel world, stamp, sticker album,
+  storybook, display case, snow globe, theatre, comic, star map, train...) with a random
+  twist, skipping ones used on recent cards.
+- `gallery` refuses options that share a concept, composition or style, lack `concept`,
+  `elements`, the real picture or hand-drawn objects, or repeat a recent card's concept;
+  it shows each option's name and idea and prints which object comes from which episode.
+  `chosen` and `history` keep the concept record.
+- New style `diorama` (paper box, layers at depth 1-5 with growing shadows). `pixel` now makes
+  a whole game scene (stepped sky, ground, crisp sprites, limited palette) and keeps real
+  artwork sharp.
+- New layers: `label`, `frame` (stamp, card, book, case, ticket, scroll, globe, stage),
+  `dots`, `tiles`, `sprite`, and `depth` on any layer. 30 more hand-drawn motifs.
+- `yoto-brief` keeps descriptions nearly whole for every episode, accepts local image files
+  and writes an `elements.json` skeleton.
+- `tools/yoto-cover-backup.mjs` saves the old cover and icons and prints the restore call.
+
 ## 2026-11-25 — smaller piece marker
 
 - The leftover piece's number and size now sit right under the cut line, in a strip under
